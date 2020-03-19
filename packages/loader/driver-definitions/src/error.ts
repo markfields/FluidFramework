@@ -30,15 +30,6 @@ export interface IThrottlingError {
     critical?: boolean;
 }
 
-export interface IConnectionError {
-    readonly errorType: ErrorType.connectionError;
-    readonly message: string;
-    readonly canRetry?: boolean;
-    readonly statusCode?: number;
-    readonly online: string;
-    critical?: boolean;
-}
-
 export interface IServiceError {
     readonly errorType: ErrorType.serviceError;
     critical?: boolean;
@@ -57,4 +48,29 @@ export interface IWriteError {
 export interface IFatalError {
     readonly errorType: ErrorType.fatalError;
     readonly critical: boolean;
+}
+
+export enum ConnectionErrorType {
+    accessDenied,
+    notFound,
+}
+
+export type IConnectionError = IConnectionAccessDeniedError | IConnectionNotFoundError | IGeneralConnectionError;
+
+export interface IConnectionAccessDeniedError extends IGeneralConnectionError {
+    readonly connectionError: ConnectionErrorType.accessDenied;
+}
+
+export interface IConnectionNotFoundError extends IGeneralConnectionError {
+    readonly connectionError: ConnectionErrorType.notFound;
+}
+
+export interface IGeneralConnectionError {
+    readonly errorType: ErrorType.connectionError;
+    readonly connectionError?: ConnectionErrorType
+    readonly message: string;
+    readonly canRetry?: boolean;
+    readonly statusCode?: number;
+    readonly online: string;
+    critical?: boolean;
 }
