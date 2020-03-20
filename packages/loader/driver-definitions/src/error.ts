@@ -4,7 +4,7 @@
  */
 
 // tslint:disable: no-unsafe-any
-export enum ErrorType {
+enum ErrorType {
     generalError,
     connectionError,
     throttlingError,
@@ -12,7 +12,46 @@ export enum ErrorType {
     summarizingError,
     writeError,
     fatalError,
+    actuallyX,
+    actuallyY,
 }
+
+export enum ConnectionErrorType {
+    default,
+    accessDenied,
+    notFound,
+}
+
+namespace MetaType2 {
+    export const subb = {
+        generalError: ErrorType.generalError,
+        throttlingError: ErrorType.throttlingError,
+    };
+
+    // export class Subb {
+    //     export static const generalError: ErrorType.generalError;
+    //     export static const throttlingError: ErrorType.throttlingError;
+    // }
+
+    // const actually = {
+    //     x: ErrorType.actuallyX,
+    //     y: ErrorType.actuallyY,
+    // };
+}
+
+export const MetaType = {
+    sub: {
+        generalError: ErrorType.generalError,
+        throttlingError: ErrorType.throttlingError,
+    },
+    actually: {
+        x: ErrorType.actuallyX,
+        y: ErrorType.actuallyY,
+    },
+};
+
+const foo = MetaType.sub.throttlingError;
+alert(foo);
 
 export type IError = IGeneralError | IThrottlingError | IConnectionError |
 IServiceError | ISummarizingError | IWriteError | IFatalError;
@@ -24,7 +63,7 @@ export interface IGeneralError {
 }
 
 export interface IThrottlingError {
-    readonly errorType: ErrorType.throttlingError;
+    readonly errorType: MetaType.sub.throttlingError;
     readonly message: string;
     readonly retryAfterSeconds: number;
     critical?: boolean;

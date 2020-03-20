@@ -8,7 +8,7 @@ import {
     IFatalError,
     IThrottlingError,
     IWriteError,
-    ErrorType,
+    MetaType,
     ConnectionErrorType,
 } from "@microsoft/fluid-driver-definitions";
 
@@ -44,7 +44,7 @@ export class NetworkError extends Error implements IConnectionError {
  * Throttling error class - used to communicate all throttling errors
  */
 export class ThrottlingError extends Error implements IThrottlingError {
-    readonly errorType: ErrorType.throttlingError = ErrorType.throttlingError;
+    readonly errorType: ErrorType.throttlingError = MetaType.sub.throttlingError;
 
     constructor(errorMessage: string, readonly retryAfterSeconds: number) {
         super(errorMessage);
