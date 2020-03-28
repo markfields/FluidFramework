@@ -119,8 +119,7 @@ async function resolveUrl(url: string): Promise<IResolvedUrl | undefined> {
     const resolversList: IUrlResolver[] = [
         new OdspUrlResolver(),
         new FluidAppOdspUrlResolver(),
-        // eslint-disable-next-line @typescript-eslint/promise-function-async
-        new RouterliciousUrlResolver(undefined, () => Promise.resolve(paramJWT), []),
+        new RouterliciousUrlResolver(undefined, async () => paramJWT, []),
     ];
     const resolved = await configurableUrlResolver(resolversList, { url });
     return resolved;

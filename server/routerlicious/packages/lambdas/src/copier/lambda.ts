@@ -90,13 +90,12 @@ export class CopierLambda implements IPartitionLambda {
     private async processMongoCore(kafkaBatches: IRawOperationMessageBatch[]): Promise<void> {
         await this.rawOpCollection
             .insertMany(kafkaBatches, false)
-            // eslint-disable-next-line @typescript-eslint/promise-function-async
             .catch((error) => {
                 // Duplicate key errors are ignored since a replay may cause us to insert twice into Mongo.
                 // All other errors result in a rejected promise.
                 if (error.code !== 11000) {
                     // Needs to be a full rejection here
-                    return Promise.reject(error);
+                    throw error;
                 }
             });
     }

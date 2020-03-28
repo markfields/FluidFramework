@@ -125,7 +125,7 @@ export class TestHistorian implements IHistorian {
     }
 
     // eslint-disable-next-line @typescript-eslint/promise-function-async
-    public getRefs(): Promise<git.IRef[]> {
+    public async getRefs(): Promise<git.IRef[]> {
         throw new Error("Not Supported");
     }
 

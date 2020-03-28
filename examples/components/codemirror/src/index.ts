@@ -68,5 +68,4 @@ class CodeMirrorFactory implements IRuntimeFactory {
 export const fluidExport = new CodeMirrorFactory();
 
 export const instantiateRuntime =
-    // eslint-disable-next-line @typescript-eslint/promise-function-async
-    (context: IContainerContext): Promise<IRuntime> => fluidExport.instantiateRuntime(context);
+    async (context: IContainerContext): Promise<IRuntime> => fluidExport.instantiateRuntime(context);

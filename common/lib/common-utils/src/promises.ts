@@ -64,8 +64,7 @@ export class Deferred<T> {
 /**
  * Helper function that asserts that the given promise only resolves
  */
-// eslint-disable-next-line @typescript-eslint/promise-function-async
-export function assertNotRejected<T>(promise: Promise<T>): Promise<T> {
+export async function assertNotRejected<T>(promise: Promise<T>): Promise<T> {
     // Assert that the given promise only resolves
     promise.catch((error) => {
         assert.ok(false);

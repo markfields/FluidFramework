@@ -102,7 +102,7 @@ export class GraphQLService {
                         },
                     },
                     // eslint-disable-next-line @typescript-eslint/promise-function-async
-                    resolve: (obj, { id, name }) => {
+                    resolve: async (obj, { id, name }) => {
                         const key = `${prefix}${id}`;
                         if (!this.root.has(key)) {
                             return Promise.reject("Hero not found");

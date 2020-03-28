@@ -133,8 +133,8 @@ class GraphIQLView implements IComponentHTMLView {
 
         const graphQLServer = new GraphQLService(this.realComponent.root);
 
-        // eslint-disable-next-line @typescript-eslint/promise-function-async
-        const graphQLFetcher = (graphQLParams) => graphQLServer.runQuery(graphQLParams.query, graphQLParams.variables);
+        const graphQLFetcher = async (graphQLParams) =>
+            graphQLServer.runQuery(graphQLParams.query, graphQLParams.variables);
 
         ReactDOM.render(
             React.createElement(
