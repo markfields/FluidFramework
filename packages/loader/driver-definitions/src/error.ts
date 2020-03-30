@@ -73,3 +73,9 @@ export interface IFatalError {
     readonly errorType: ErrorType.fatalError;
     readonly critical: boolean;
 }
+
+export function newError(ierror: IError): Error {
+    const e = new Error();
+    const e2 = {...e, ...ierror};
+    return e2;
+}
