@@ -149,11 +149,46 @@ export class SinglePromise<T> {
     }
 }
 
+class CancelablePromiseWrapper<T> {
+    public readonly promise: Promise<T>;
+    private cancelAndReject?: (error: any) => void;
+    private state: any;
+
+    constructor(
+        executor,
+        private readonly onCancel: (state: any) => void,
+    ) {
+        this.promise = new Promise((res, rej) => {
+            this.state = executor(res, rej);
+            this.cancelAndReject = (error: any = new Error("Cancelled Promise")) => {
+                this.onCancel(this.state);
+                rej(error);
+            };
+            return this.state;
+        });
+    }
+
+    public cancel(error?: any) { return this.cancelAndReject?.(error); }
+}
+
+// eslint-disable-next-line @typescript-eslint/promise-function-async
+export function newCancelablePromise<T>(executor, onCancel): ICancelablePromise<T> {
+    const cpWrapper = new CancelablePromiseWrapper<T>(executor, onCancel);
+    const promise = cpWrapper.promise as ICancelablePromise<T>;
+    promise.cancel = () => cpWrapper.cancel();
+    return promise;
+}
+
 /**
  * A Promise wrapper for window.setTimeout
  * @param ms - (optional) How many ms to wait before continuing
  */
-export const delay = async (ms?: number) => new Promise((res) => setTimeout(res, ms));
+export async function delay(ms?: number) {
+    return newCancelablePromise(
+        (res) => setTimeout(res, ms),
+        (timeout) => clearTimeout(timeout),
+    );
+}
 
 /**
  * A simple wrapper around Promise for when dealing with the
@@ -233,7 +268,7 @@ export class PromiseRegistry<T> {
                 this.expirationOrders.delete(oldExpiryKey);
             }
 
-            const newExpiryKey = `${key}-${Date()}`;
+            const newExpiryKey = `${key}-${(new Date()).getTime()}`;
             this.expiryKeys.set(key, newExpiryKey);
 
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -246,7 +281,7 @@ export class PromiseRegistry<T> {
     private async gc(key: string, expiryKey: string, expiryTime: number) {
         this.expirationOrders.set(expiryKey);
 
-        await delay(expiryTime);
+        //await delay(expiryTime);
 
         // Only execute the gc delete if our expiryKey is still present to be removed here
         if (this.expirationOrders.delete(expiryKey)) {
