@@ -48,7 +48,7 @@ export class MultiDocumentServiceFactory implements IDocumentServiceFactory{
             throw new Error("No protocol provided");
         }
         const factory: IDocumentServiceFactory | undefined = this.protocolToDocumentFactoryMap.get(urlObj.protocol);
-        if (factory === undefined) {
+        if (!factory) {
             throw new Error("Unknown fluid protocol");
         }
 
