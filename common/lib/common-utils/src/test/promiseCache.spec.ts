@@ -311,5 +311,23 @@ describe("PromiseCache", () => {
 
             assert.equal(pc.has(1), false);
         });
+
+        it.only("Remove before expiry", async () => {
+            pc = new PromiseCache<number, string>({
+                expiry: { policy: "absolute", durationMs: 15 },
+            });
+
+            pc.addValue(1, "one");
+
+            clock.tick (5);
+            assert.equal(pc.has(1), true);
+
+            clock.tick (5);
+            pc.remove(1);
+            assert.equal(pc.has(1), false);
+
+            clock.tick (10);
+            assert.equal(pc.has(1), false);
+        });
     });
 });
