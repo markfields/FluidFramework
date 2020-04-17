@@ -12,6 +12,7 @@ export interface IProvideComponentLoadable {
 }
 /**
  * A shared component has a URL from which it can be referenced
+ * //todo - SharedObject implement this too, so probably shouldn't just talk about "component" in the comments.
  */
 export interface IComponentLoadable extends IProvideComponentLoadable {
     // Absolute URL to the component within the document

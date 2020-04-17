@@ -18,6 +18,9 @@ export interface IProvideChannel {
     readonly IChannel: IChannel;
 }
 
+/**
+ * ??? ;) //todo
+ */
 export interface IChannel extends IProvideChannel, IComponentLoadable {
     /**
      * A readonly identifier for the shared object

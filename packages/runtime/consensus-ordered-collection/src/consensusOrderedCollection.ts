@@ -407,7 +407,7 @@ export class ConsensusOrderedCollection<T = any>
         if (this.isLocal()) {
             // can be undefined if queue is empty
             const value = this.acquireCore(uuid(), belongsToUnattached);
-            return Promise.resolve(value);
+            return value;
         }
 
         return this.submit<IConsensusOrderedCollectionAcquireOperation>({

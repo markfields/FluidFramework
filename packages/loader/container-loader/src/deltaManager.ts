@@ -126,7 +126,7 @@ export class DeltaManager extends EventEmitter implements IDeltaManager<ISequenc
     private readonly _inboundSignal: DeltaQueue<ISignalMessage>;
     private readonly _outbound: DeltaQueue<IDocumentMessage[]>;
 
-    private connectionP: Promise<IConnectionDetails> | undefined;
+    private tryingToConnectP: Promise<IConnectionDetails> | undefined;
     private connection: DeltaConnection | undefined;
     private clientSequenceNumber = 0;
     private clientSequenceNumberObserved = 0;
@@ -364,8 +364,9 @@ export class DeltaManager extends EventEmitter implements IDeltaManager<ISequenc
             return this.connection.details;
         }
 
-        if (this.connectionP) {
-            return this.connectionP;
+        // This Promise encapsulates the active retry loop of trying to connect
+        if (this.tryingToConnectP) {
+            return this.tryingToConnectP;
         }
 
         const fetchOpsFromStorage = args.fetchOpsFromStorage ?? true;
@@ -457,13 +458,13 @@ export class DeltaManager extends EventEmitter implements IDeltaManager<ISequenc
             return connection;
         };
 
-        // This promise settles as soon as we know the outcome of the connection attempt
-        this.connectionP = new Promise((resolve, reject) => {
+        // This promise settles and the variable is unset as soon as we know the outcome of the connection attempt
+        this.tryingToConnectP = new Promise((resolve, reject) => {
             // Regardless of how the connection attempt concludes, we'll clear the promise and remove the listener
 
             // Reject the connection promise if the DeltaManager gets closed during connection
             const cleanupAndReject = (error) => {
-                this.connectionP = undefined;
+                this.tryingToConnectP = undefined;
                 this.removeListener("closed", cleanupAndReject);
                 reject(error);
             };
@@ -471,13 +472,13 @@ export class DeltaManager extends EventEmitter implements IDeltaManager<ISequenc
 
             // Attempt the connection
             connectCore().then((connection) => {
-                this.connectionP = undefined;
+                this.tryingToConnectP = undefined;
                 this.removeListener("closed", cleanupAndReject);
                 resolve(connection.details);
             }).catch(cleanupAndReject);
         });
 
-        return this.connectionP;
+        return this.tryingToConnectP;
     }
 
     public flush() {

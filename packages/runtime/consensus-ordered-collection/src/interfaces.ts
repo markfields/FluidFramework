@@ -73,7 +73,7 @@ export interface IConsensusOrderedCollectionEvents<T> extends ISharedObjectEvent
 /**
  * Consensus Ordered Collection interface
  *
- * An consensus ordered collection is a distributed data structure, which
+ * A consensus ordered collection is a distributed data structure, which
  * holds a collection of JSON-able or shared objects, and have a
  * deterministic add/remove order.
  *
@@ -87,8 +87,8 @@ export interface IConsensusOrderedCollectionEvents<T> extends ISharedObjectEvent
  * A function `wait` is provided to wait for and remove an entry in the collection.
  *
  * All non-shared objects added to the collection will be cloned (via JSON).
- * They will not be references to the original input object.  Thus changed to
- * the input object will not reflect the object in the collection.
+ * They will not be references to the original input object.  Thus changes to
+ * the input object will not change the object in the collection.
  */
 export interface IConsensusOrderedCollection<T = any> extends ISharedObject<IConsensusOrderedCollectionEvents<T>> {
 
