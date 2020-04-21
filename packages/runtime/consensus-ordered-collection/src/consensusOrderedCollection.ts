@@ -12,7 +12,8 @@ import {
     MessageType,
     TreeEntry,
 } from "@microsoft/fluid-protocol-definitions";
-import { IChannelAttributes, IComponentRuntime, IObjectStorageService } from "@microsoft/fluid-runtime-definitions";
+// eslint-disable-next-line max-len
+import { IChannelAttributes, IComponentRuntime, IObjectStorageService, Jsonable, AsJsonable } from "@microsoft/fluid-runtime-definitions";
 import { SharedObject } from "@microsoft/fluid-shared-object-base";
 import { v4 as uuid } from "uuid";
 import {
@@ -102,7 +103,7 @@ const belongsToUnattached = undefined;
  * Implements the shared object's communication, handles the sending/processing
  * operations, provides the asynchronous API and manage the promise resolution.
  */
-export class ConsensusOrderedCollection<T = any>
+export class ConsensusOrderedCollection<T extends Jsonable = Jsonable>
     extends SharedObject<IConsensusOrderedCollectionEvents<T>> implements IConsensusOrderedCollection<T> {
     private readonly promiseResolveQueue: IPendingRecord<T>[] = [];
 
@@ -140,7 +141,7 @@ export class ConsensusOrderedCollection<T = any>
     /**
      * Add a value to the consensus collection.
      */
-    public async add(value: T): Promise<void> {
+    public async add(value: AsJsonable<T>): Promise<void> {
         const valueSer = this.serializeValue(value);
 
         if (this.isLocal()) {
@@ -210,6 +211,10 @@ export class ConsensusOrderedCollection<T = any>
         // all checked out work!
         this.removeClient(belongsToUnattached);
 
+        const dataArray = this.data.asArray()[0];
+        if (dataArray === undefined) { throw new Error(); }
+        const d: Jsonable = dataArray;
+
         const tree: ITree = {
             entries: [
                 {
@@ -217,7 +222,7 @@ export class ConsensusOrderedCollection<T = any>
                     path: snapshotFileNameData,
                     type: TreeEntry[TreeEntry.Blob],
                     value: {
-                        contents: this.serializeValue(this.data.asArray()),
+                        contents: this.serializeValue(d),
                         encoding: "utf-8",
                     },
                 },
@@ -441,7 +446,7 @@ export class ConsensusOrderedCollection<T = any>
         added.map((value) => this.emit("add", value, false /* newlyAdded */));
     }
 
-    private serializeValue(value) {
+    private serializeValue(value: AsJsonable<T>) {
         return this.runtime.IComponentSerializer.stringify(
             value,
             this.runtime.IComponentHandleContext,

@@ -7,6 +7,8 @@ import {
     IComponentRuntime,
     ISharedObjectServices,
     IChannelAttributes,
+    Jsonable,
+    AsJsonable,
 } from "@microsoft/fluid-runtime-definitions";
 import { ISharedObject, ISharedObjectFactory, ISharedObjectEvents } from "@microsoft/fluid-shared-object-base";
 
@@ -90,12 +92,13 @@ export interface IConsensusOrderedCollectionEvents<T> extends ISharedObjectEvent
  * They will not be references to the original input object.  Thus changed to
  * the input object will not reflect the object in the collection.
  */
-export interface IConsensusOrderedCollection<T = any> extends ISharedObject<IConsensusOrderedCollectionEvents<T>> {
+export interface IConsensusOrderedCollection<T extends Jsonable = Jsonable>
+    extends ISharedObject<IConsensusOrderedCollectionEvents<T>> {
 
     /**
      * Adds a value to the collection
      */
-    add(value: T): Promise<void>;
+    add(value: AsJsonable<T>): Promise<void>;
 
     /**
      * Retrieves a value from the collection.

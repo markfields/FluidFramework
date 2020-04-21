@@ -8,6 +8,7 @@ import {
     IComponentHandleContext,
     IComponentSerializer,
 } from "@microsoft/fluid-component-core-interfaces";
+import { Jsonable } from "@microsoft/fluid-runtime-definitions";
 import { ComponentHandle } from "./componentHandle";
 import { isSerializedHandle } from "./utils";
 
@@ -48,7 +49,7 @@ export class ComponentSerializer implements IComponentSerializer {
             : input;
     }
 
-    public stringify(input: any, context: IComponentHandleContext, bind: IComponentHandle) {
+    public stringify(input: Jsonable, context: IComponentHandleContext, bind: IComponentHandle) {
         return JSON.stringify(input, (key, value) => {
             // If the current 'value' is not a handle, return it unmodified.  Otherwise,
             // return the result of 'serializeHandle'.
