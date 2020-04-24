@@ -25,18 +25,56 @@ import { IConsensusRegisterCollection, ReadPolicy, IConsensusRegisterCollectionE
 
 interface ILocalData<T> {
     // Atomic version
-    atomic: ILocalRegister<T>;
+    atomic: LocalRegister<T>;
 
     // All concurrent versions awaiting consensus
-    versions: ILocalRegister<T>[];
+    versions: LocalRegister<T>[];
 }
 
-interface ILocalRegister<T> {
-    // Register value
-    value: T;
+class LocalRegister<T> {
+    /**
+     * Create a new local register
+     * @param sequenceNumber - The sequence number when last consensus was reached
+     * @param value - The register value
+     */
+    constructor(
+        public readonly sequenceNumber: number,
+        public readonly value: T,
+    ) {}
 
-    // The sequence number when last consensus was reached
-    sequenceNumber: number;
+    /**
+     * Special serialization logic for backwards compatibility with < 0.17
+     */
+    public serializeLocalRegister() {
+        return {
+            sequenceNumber: this.sequenceNumber,
+            value: {
+                type: "Plain",
+                value: this.value,
+            },
+        };
+    }
+
+    /**
+     * For use with JSON.stringify
+     */
+    static replacer(k: string, v: any): any {
+        return v?.serializeLocalRegister?.() ?? v;
+    }
+
+    /**
+     * For use with JSON.parse
+     */
+    static reviver(k: string, v: any): any {
+        // Match on this shape:
+        // { sequenceNumber: number, value: { type: "Plain", value: ... } }
+        if (typeof v.sequenceNumber === "number" &&
+            v?.value.type === "Plain" &&
+            v?.value.value !== undefined) {
+            return new LocalRegister(v.sequenceNumber, v?.value.value);
+        }
+        return v;
+    }
 }
 
 /**
@@ -164,7 +202,7 @@ export class ConsensusRegisterCollection<T>
 
     public readVersions(key: string): T[] | undefined {
         const data = this.data.get(key);
-        return data?.versions.map((element: ILocalRegister<T>) => element.value);
+        return data?.versions.map((element: LocalRegister<T>) => element.value);
     }
 
     public keys(): string[] {
@@ -265,10 +303,10 @@ export class ConsensusRegisterCollection<T>
         // Atomic update if it's a new register or the write attempt was not concurrent (ref seq >= sequence number)
         const winner = data === undefined || refSeq >= data.atomic.sequenceNumber;
         if (winner) {
-            const atomicUpdate: ILocalRegister<T> = {
+            const atomicUpdate = new LocalRegister<T>(
                 sequenceNumber,
-                value: deserializedValue,
-            };
+                deserializedValue,
+            );
             if (data === undefined) {
                 data = {
                     atomic: atomicUpdate,
@@ -289,10 +327,10 @@ export class ConsensusRegisterCollection<T>
             data.versions.shift();
         }
 
-        const versionUpdate: ILocalRegister<T> = {
+        const versionUpdate = new LocalRegister<T>(
             sequenceNumber,
-            value: deserializedValue,
-        };
+            deserializedValue,
+        );
 
         assert(
             data.versions.length === 0 ||
@@ -324,12 +362,14 @@ export class ConsensusRegisterCollection<T>
         return this.runtime.IComponentSerializer.stringify(
             value,
             this.runtime.IComponentHandleContext,
-            this.handle);
+            this.handle,
+            LocalRegister.replacer);
     }
 
     private parse(content: string): any {
         return this.runtime.IComponentSerializer.parse(
             content,
-            this.runtime.IComponentHandleContext);
+            this.runtime.IComponentHandleContext,
+            LocalRegister.reviver);
     }
 }

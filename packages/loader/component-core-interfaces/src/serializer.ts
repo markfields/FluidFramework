@@ -34,12 +34,21 @@ export interface IComponentSerializer extends IProvideComponentSerializer {
 
     /**
      * Stringifies a given value. Converts any IComponentHandle to its stringified equivalent.
+     * replacer will be applied to non-handles only.
      */
-    stringify(value: any, context: IComponentHandleContext, bind: IComponentHandle): string;
+    stringify(
+        value: any,
+        context: IComponentHandleContext,
+        bind: IComponentHandle,
+        replacer?: ((this: any, key: string, value: any) => any)): string;
 
     /**
-     * Parses the given JSON input string and returns the JavaScript object defined by it. Any component
-     * handles will be realized as part of the parse
+     * Parses the given JSON input string and returns the JavaScript object defined by it.
+     * Any component handles will be realized as part of the parse
+     * reviver will be applied to non-handles only
      */
-    parse(value: string, context: IComponentHandleContext): any;
+    parse(
+        value: string,
+        context: IComponentHandleContext,
+        reviver?: ((this: any, key: string, value: any) => any)): any;
 }

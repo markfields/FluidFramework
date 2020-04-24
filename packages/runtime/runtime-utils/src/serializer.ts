@@ -48,7 +48,12 @@ export class ComponentSerializer implements IComponentSerializer {
             : input;
     }
 
-    public stringify(input: any, context: IComponentHandleContext, bind: IComponentHandle) {
+    public stringify(
+        input: any,
+        context: IComponentHandleContext,
+        bind: IComponentHandle,
+        replacer?: ((this: any, key: string, value: any) => any),
+    ) {
         return JSON.stringify(input, (key, value) => {
             // If the current 'value' is not a handle, return it unmodified.  Otherwise,
             // return the result of 'serializeHandle'.
@@ -58,19 +63,25 @@ export class ComponentSerializer implements IComponentSerializer {
             // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
             return handle
                 ? this.serializeHandle(handle, context, bind)
-                : value;
+                : replacer !== undefined
+                    ? replacer(key, value)
+                    : value;
         });
     }
 
     // Parses the serialized data - context must match the context with which the JSON was stringified
-    public parse(input: string, context: IComponentHandleContext) {
+    public parse(
+        input: string,
+        context: IComponentHandleContext,
+        reviver?: ((this: any, key: string, value: any) => any),
+    ) {
         let root: IComponentHandleContext;
 
         return JSON.parse(
             input,
             (key, value) => {
                 if (!isSerializedHandle(value)) {
-                    return value;
+                    return reviver !== undefined ? reviver(key, value) : value;
                 }
 
                 // If the stored URL is absolute then we need to adjust the context from which we load. For
