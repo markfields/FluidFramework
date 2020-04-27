@@ -86,7 +86,7 @@ const snapshotFileName = "header";
  * Implementation of a consensus register collection
  */
 export class ConsensusRegisterCollection<T>
-    extends SharedObject<IConsensusRegisterCollectionEvents> implements IConsensusRegisterCollection<T> {
+    extends SharedObject<IConsensusRegisterCollectionEvents<T>> implements IConsensusRegisterCollection<T> {
     /**
      * Create a new consensus register collection
      *

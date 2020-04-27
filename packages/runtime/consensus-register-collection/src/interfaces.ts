@@ -12,19 +12,19 @@ import { ISharedObject, ISharedObjectFactory, ISharedObjectEvents } from "@micro
  * Extends the base ISharedObjectFactory to return a more definite type of IConsensusRegisterCollection
  * Use for the runtime to create and load distributed data structure by type name of each channel
  */
-export interface IConsensusRegisterCollectionFactory extends ISharedObjectFactory {
+export interface IConsensusRegisterCollectionFactory<T> extends ISharedObjectFactory {
     load(
         document: IComponentRuntime,
         id: string,
         services: ISharedObjectServices,
         branchId: string,
-        attributes: IChannelAttributes): Promise<IConsensusRegisterCollection>;
+        attributes: IChannelAttributes): Promise<IConsensusRegisterCollection<T>>;
 
-    create(document: IComponentRuntime, id: string): IConsensusRegisterCollection;
+    create(document: IComponentRuntime, id: string): IConsensusRegisterCollection<T>;
 }
 
-export interface IConsensusRegisterCollectionEvents extends ISharedObjectEvents{
-    (event: "atomicChanged" | "versionChanged", listener: (key: string, value: any, local: boolean) => void);
+export interface IConsensusRegisterCollectionEvents<T> extends ISharedObjectEvents{
+    (event: "atomicChanged" | "versionChanged", listener: (key: string, value: T, local: boolean) => void);
 }
 
 /**
@@ -47,7 +47,7 @@ export interface IConsensusRegisterCollectionEvents extends ISharedObjectEvents{
  * LWW: The last write to a key always wins.
  *
  */
-export interface IConsensusRegisterCollection<T = any> extends ISharedObject<IConsensusRegisterCollectionEvents> {
+export interface IConsensusRegisterCollection<T> extends ISharedObject<IConsensusRegisterCollectionEvents<T>> {
     /**
      * Attempts to write a register with a value. Returns a promise to indicate the roundtrip completion.
      * For a non existent register, it will attempt to create a new register with the specified value.

@@ -4,6 +4,7 @@
  */
 
 import * as assert from "assert";
+import { IComponentHandle } from "@microsoft/fluid-component-core-interfaces";
 import {
     FileMode,
     IBlob,
@@ -12,16 +13,17 @@ import {
     TreeEntry,
 } from "@microsoft/fluid-protocol-definitions";
 import { MockDeltaConnectionFactory, MockRuntime, MockStorage } from "@microsoft/fluid-test-runtime-utils";
-import { IDeltaConnection } from "@microsoft/fluid-runtime-definitions";
+import { IDeltaConnection, Jsonable } from "@microsoft/fluid-runtime-definitions";
 import { strongAssert } from "@microsoft/fluid-runtime-utils";
 import { ConsensusRegisterCollectionFactory } from "../consensusRegisterCollectionFactory";
 import { IConsensusRegisterCollection } from "../interfaces";
 
 describe("ConsensusRegisterCollection", () => {
+    type Serializable = Jsonable | IComponentHandle;
     const snapshotFileName = "header";
     const componentId = "consensus-register-collection";
-    const crcFactory = new ConsensusRegisterCollectionFactory();
-    let crc: IConsensusRegisterCollection;
+    const crcFactory = new ConsensusRegisterCollectionFactory<Serializable>();
+    let crc: IConsensusRegisterCollection<Serializable>;
     let runtime: MockRuntime;
     let deltaConnFactory: MockDeltaConnectionFactory;
     let deltaConnection: IDeltaConnection;

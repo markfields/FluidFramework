@@ -4,6 +4,7 @@
  */
 
 import * as assert from "assert";
+import { IComponentHandle } from "@microsoft/fluid-component-core-interfaces";
 import { ConnectionState } from "@microsoft/fluid-protocol-definitions";
 import { strongAssert } from "@microsoft/fluid-runtime-utils";
 import { MockDeltaConnectionFactory, MockRuntime, MockStorage } from "@microsoft/fluid-test-runtime-utils";

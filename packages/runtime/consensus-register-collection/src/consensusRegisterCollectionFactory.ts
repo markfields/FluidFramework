@@ -11,7 +11,7 @@ import { pkgVersion } from "./packageVersion";
 /**
  * The factory that defines the consensus queue
  */
-export class ConsensusRegisterCollectionFactory implements IConsensusRegisterCollectionFactory {
+export class ConsensusRegisterCollectionFactory<T> implements IConsensusRegisterCollectionFactory<T> {
     public static Type = "https://graph.microsoft.com/types/consensus-register-collection";
 
     public static readonly Attributes: IChannelAttributes = {
@@ -33,14 +33,15 @@ export class ConsensusRegisterCollectionFactory implements IConsensusRegisterCol
         id: string,
         services: ISharedObjectServices,
         branchId: string,
-        attributes: IChannelAttributes): Promise<IConsensusRegisterCollection> {
-        const collection = new ConsensusRegisterCollection(id, runtime, attributes);
+        attributes: IChannelAttributes): Promise<IConsensusRegisterCollection<T>> {
+        const collection = new ConsensusRegisterCollection<T>(id, runtime, attributes);
         await collection.load(branchId, services);
         return collection;
     }
 
-    public create(document: IComponentRuntime, id: string): IConsensusRegisterCollection {
-        const collection = new ConsensusRegisterCollection(id, document, ConsensusRegisterCollectionFactory.Attributes);
+    public create(document: IComponentRuntime, id: string): IConsensusRegisterCollection<T> {
+        const collection =
+            new ConsensusRegisterCollection<T>(id, document, ConsensusRegisterCollectionFactory.Attributes);
         collection.initializeLocal();
         return collection;
     }
