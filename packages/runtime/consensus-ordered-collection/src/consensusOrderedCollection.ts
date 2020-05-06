@@ -104,7 +104,10 @@ const unattachedOwnerId = undefined;
  * IOrderedCollection that will define the deterministic add/acquire order and snapshot ability.
  */
 export class ConsensusOrderedCollection<T = any>
-    extends SharedObject<IConsensusOrderedCollectionEvents<T>> implements IConsensusOrderedCollection<T> {
+    extends SharedObject<
+    IConsensusOrderedCollectionOperation,
+    IConsensusOrderedCollectionValue<T> | undefined,
+    IConsensusOrderedCollectionEvents<T>> implements IConsensusOrderedCollection<T> {
     /** Queue of local messages awaiting ack from the server */
     private readonly pendingLocalMessages: IPendingRecord<T>[] = [];
 
@@ -193,13 +196,7 @@ export class ConsensusOrderedCollection<T = any>
         do {
             if (this.data.size() === 0) {
                 // Wait for new entry before trying to acquire again
-                await new Promise((resolve, reject) => {
-                    this.once("add", resolve);
-                    //* todo: figure out the right event that's available or fix the proxy
-                    (this.runtime.deltaManager).on(
-                        "closed",
-                        () => reject(new Error("Delta Manager closed while waiting")));
-                });
+                await this.opPromise<IConsensusOrderedCollectionOperation>((op) => op.opName === "add");
             }
         } while (!(await this.acquire(callback)));
     }
@@ -332,47 +329,25 @@ export class ConsensusOrderedCollection<T = any>
     protected processCore(message: ISequencedDocumentMessage, local: boolean) {
         if (message.type === MessageType.Operation) {
             const op: IConsensusOrderedCollectionOperation = message.contents;
-            let value: IConsensusOrderedCollectionValue<T> | undefined;
             switch (op.opName) {
                 case "add":
                     this.addCore(this.deserializeValue(op.value) as T);
-                    break;
+                    return;
 
                 case "acquire":
-                    value = this.acquireCore(op.acquireId, message.clientId);
-                    break;
+                    return this.acquireCore(op.acquireId, message.clientId);
 
                 case "complete":
                     this.completeCore(op.acquireId);
-                    break;
+                    return;
 
                 case "release":
                     this.releaseCore(op.acquireId);
-                    break;
+                    return;
 
                 default: unreachableCase(op);
             }
-            if (local) {
-                this.onLocalMessageAck(message, value);
-            }
         }
-    }
-
-    /**
-     * Resolve the promise of a local operation
-     *
-     * @param message - the message of the operation
-     * @param value - the value related to the operation
-     */
-    private onLocalMessageAck(
-        message: ISequencedDocumentMessage,
-        value: IConsensusOrderedCollectionValue<T> | undefined)
-    {
-        const pending = this.pendingLocalMessages.shift();
-        strongAssert(pending);
-        assert(message.contents.opName === pending.message.opName);
-        assert(message.clientSequenceNumber === pending.clientSequenceNumber);
-        pending.resolve(value);
     }
 
     private async submit<TMessage extends IConsensusOrderedCollectionOperation>(
@@ -381,10 +356,10 @@ export class ConsensusOrderedCollection<T = any>
         assert(!this.isLocal());
 
         const clientSequenceNumber = this.submitLocalMessage(message);
-        return new Promise((resolve) => {
-            // Note that clientSequenceNumber and message is only used for asserts and isn't strictly necessary.
-            this.pendingLocalMessages.push({ resolve, clientSequenceNumber, message });
-        });
+        //* todo: (debug?) assert that clientSequenceNumber matches
+        //* todo: Maybe only assert opName matches too and just retur true in lambda to get next op?
+        assert(clientSequenceNumber);  //* todo: delete me
+        return this.opPromise((op) => op.contents.opName === message.opName);
     }
 
     private addCore(value: T) {

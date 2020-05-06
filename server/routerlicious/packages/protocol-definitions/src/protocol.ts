@@ -148,7 +148,7 @@ export interface IBranchOrigin {
 /**
  * Sequenced message for a distributed document
  */
-export interface ISequencedDocumentMessage {
+export interface ISequencedDocumentMessage<TContent = any> {
     // The client ID that submitted the delta
     clientId: string;
 
@@ -168,7 +168,7 @@ export interface ISequencedDocumentMessage {
     type: string;
 
     // The contents of the message
-    contents: any;
+    contents: TContent;
 
     // App provided metadata about the operation
     metadata?: any;

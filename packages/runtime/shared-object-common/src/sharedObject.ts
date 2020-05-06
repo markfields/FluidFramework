@@ -23,7 +23,11 @@ import { ISharedObject, ISharedObjectEvents } from "./types";
 /**
  *  Base class from which all shared objects derive
  */
-export abstract class SharedObject<TEvent extends ISharedObjectEvents = ISharedObjectEvents>
+export abstract class SharedObject<
+    TOpContent = any,
+    TProcessResult = any,
+    TEvent extends ISharedObjectEvents = ISharedObjectEvents
+>
     extends EventEmitterWithErrorHandling<TEvent> implements ISharedObject<TEvent> {
     /**
      * @param obj - The thing to check if it is a SharedObject
@@ -236,7 +240,7 @@ export abstract class SharedObject<TEvent extends ISharedObjectEvents = ISharedO
      * @param message - The message to process
      * @param local - True if the shared object is local
      */
-    protected abstract processCore(message: ISequencedDocumentMessage, local: boolean);
+    protected abstract processCore(message: ISequencedDocumentMessage, local: boolean): TProcessResult;
 
     /**
      * Called when the object has disconnected from the delta stream.
@@ -389,21 +393,47 @@ export abstract class SharedObject<TEvent extends ISharedObjectEvents = ISharedO
         }
 
         this.emit("pre-op", message, local, this);
-        this.processCore(message, local);
+        const result = this.processCore(message, local);
+        if (message.type === MessageType.Operation && local) {
+            this.emit("localOp", message, result);
+        }
         this.emit("op", message, local, this);
+    }
+
+    protected async opPromise(filter: (op: ISequencedDocumentMessage<TOpContent>) => boolean): Promise<TProcessResult> {
+        return new Promise<TProcessResult>((res, rej) => {
+            const resolveIfMatched = (op: ISequencedDocumentMessage<TOpContent>, result: TProcessResult) => {
+                if (filter(op)) {
+                    this.off("localOp", resolveIfMatched);  //* todo: will this trigger on only the first matching op?
+                    res(result);
+                }
+            };
+
+            this.on("localOp",
+                resolveIfMatched);
+
+            this.runtime.on("dispose",
+                () => { rej(new Error("Component Runtime is disposing, stop waiting for an op ack")); });
+        });
     }
 
     /**
      * Process an op that originated from the local client (i.e. is in pending state).
      * @param message - The op to process
      */
-    private processPendingOp(message: ISequencedDocumentMessage) {
+    private processPendingOp(message: ISequencedDocumentMessage<TOpContent>) {
         const firstPendingOp = this.pendingOps.peekFront();
 
         if (firstPendingOp === undefined) {
             this.logger.sendErrorEvent({ eventName: "UnexpectedAckReceived" });
             return;
         }
+
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        this.opPromise((op) => {
+            const c: number = op.contents;
+            return c > 0;
+        });
 
         // Disconnected ops should never be processed. They should have been fully sent on connected
         assert(firstPendingOp.clientSequenceNumber !== -1,
