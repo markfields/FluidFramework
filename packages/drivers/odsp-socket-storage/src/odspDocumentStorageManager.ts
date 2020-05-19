@@ -312,7 +312,7 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                     // want to use the same getLatest result.
                     this.cache.localStorage.put(odspCacheKey, odspSnapshot, 10000);
                 }
-                const { trees, tree, blobs, ops, sha } = odspSnapshot;
+                const { trees, blobs, ops, sha } = odspSnapshot;
                 const blobsIdToPathMap: Map<string, string> = new Map();
                 if (trees) {
                     this.initTreesCache(trees);
@@ -331,8 +331,8 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                 // Sometimes we get the tree instead of trees. Odsp has maintained this for back-compat reasons. They are in process of removing this
                 // and once that is achieved we can remove this condition. Also we can specify "TreesInsteadOfTree" in headers to always get "Trees"
                 // instead of "Tree"
-                if (tree) {
-                    this.treesCache.set(odspSnapshot.sha, (odspSnapshot as any) as resources.ITree);
+                if (resources.ITree.is(odspSnapshot)) {
+                    this.treesCache.set(odspSnapshot.sha, odspSnapshot);
                 }
 
                 if (blobs) {
