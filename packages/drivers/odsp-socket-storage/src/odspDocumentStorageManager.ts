@@ -497,8 +497,8 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                 if (odspSnapshot) {
                     if (odspSnapshot.trees) {
                         this.initTreesCache(odspSnapshot.trees);
-                    } else if (odspSnapshot.tree) {
-                        this.treesCache.set(odspSnapshot.sha, (odspSnapshot as any) as resources.ITree);
+                    } else if (resources.ITree.is(odspSnapshot)) {
+                        this.treesCache.set(odspSnapshot.sha, odspSnapshot);
                     }
                     if (odspSnapshot.blobs) {
                         this.initBlobsCache(odspSnapshot.blobs);

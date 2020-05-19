@@ -224,11 +224,15 @@ export interface ISnapshotCommit {
     content: string;
 }
 
-export interface IOdspSnapshot {
+/**
+ * Sometimes we get the tree instead of trees, so instead of IOdspSnaphot it may simply be ITree.
+ * Odsp has maintained this for back-compat reasons, but they are in process of removing this.
+ * Once that is achieved we can remove this extends clause.
+ */
+export interface IOdspSnapshot extends Partial<resources.ITree> {
     id: string;
     sha: string;
     trees?: resources.ITree[];
-    tree?: resources.ITree;
     blobs: resources.IBlob[];
     ops: ISequencedDeltaOpMessage[];
 }
