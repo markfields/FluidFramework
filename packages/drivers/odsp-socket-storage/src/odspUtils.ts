@@ -128,8 +128,7 @@ export async function fetchHelper(
 ): Promise<IOdspResponse<any>> {
     // Node-fetch and dom have conflicting typing, force them to work by casting for now
     return fetch(requestInfo as FetchRequestInfo, requestInit as FetchRequestInit).then(async (fetchResponse) => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-        const response = fetchResponse as any as Response;
+        const response = fetchResponse as Response;
         // Let's assume we can retry.
         if (!response) {
             throwOdspNetworkError(`No response from the server`, 400, true, response);

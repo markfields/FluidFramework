@@ -184,7 +184,7 @@ export interface ITree {
     tree: ITreeEntry[];
 }
 
-namespace ITree {
+export namespace ITree {
     export const is = (t: Partial<ITree>): t is ITree => t.tree !== undefined;
 }
 

@@ -277,7 +277,7 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                 }
 
                 const odspCacheKey: string = `${this.documentId}/getlatest`;
-                let odspSnapshot: IOdspSnapshot = await this.cache.localStorage.get(odspCacheKey);
+                let odspSnapshot: IOdspSnapshot | undefined = await this.cache.localStorage.get(odspCacheKey);
                 if (!odspSnapshot) {
                     const storageToken = await this.getStorageToken(refresh, "TreesLatest");
 
@@ -292,15 +292,23 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                         const response = await this.fetchWrapper.get<IOdspSnapshot>(url, this.documentId, headers);
                         odspSnapshot = response.content;
 
+                        console.log(odspSnapshot.sha);
                         const props = {
-                            trees: odspSnapshot.trees ? odspSnapshot.trees.length : 0,
-                            blobs: odspSnapshot.blobs ? odspSnapshot.blobs.length : 0,
+                            trees: 0,
+                            blobs: 0,
                             ops: odspSnapshot.ops.length,
                             sprequestguid: response.headers.get("sprequestguid"),
                             sprequestduration: TelemetryLogger.numberFromString(response.headers.get("sprequestduration")),
                             contentsize: TelemetryLogger.numberFromString(response.headers.get("content-length")),
                             bodysize: TelemetryLogger.numberFromString(response.headers.get("body-size")),
                         };
+
+                        if (IOdspSnapshot.is(odspSnapshot)) {
+                            props.trees = odspSnapshot.trees.length;
+                            props.blobs = odspSnapshot.blobs.length;
+                            props.ops = odspSnapshot.ops.length;
+                        }
+
                         event.end(props);
                     } catch (error) {
                         event.cancel({}, error);

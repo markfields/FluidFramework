@@ -224,17 +224,23 @@ export interface ISnapshotCommit {
     content: string;
 }
 
+export interface IOdspSnapshotCore {
+    id: string;
+    sha: string;
+    trees: resources.ITree[];
+    blobs: resources.IBlob[];
+    ops: ISequencedDeltaOpMessage[];
+}
+
 /**
  * Sometimes we get the tree instead of trees, so instead of IOdspSnaphot it may simply be ITree.
  * Odsp has maintained this for back-compat reasons, but they are in process of removing this.
- * Once that is achieved we can remove this extends clause.
+ * Once that is achieved we can remove the resources.ITree.
  */
-export interface IOdspSnapshot extends Partial<resources.ITree> {
-    id: string;
-    sha: string;
-    trees?: resources.ITree[];
-    blobs: resources.IBlob[];
-    ops: ISequencedDeltaOpMessage[];
+export type IOdspSnapshot = resources.ITree | IOdspSnapshotCore;
+
+export namespace IOdspSnapshot {
+    export const is = (s: any): s is IOdspSnapshotCore => "trees" in s && "blobs" in s;
 }
 
 export interface IOdspUrlParts {
