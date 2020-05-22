@@ -3,8 +3,15 @@
  * Licensed under the MIT License.
  */
 
+import { EventEmitter } from "events";
 import { PromiseCache } from "@microsoft/fluid-common-utils";
 import { ISocketStorageDiscovery, IOdspResolvedUrl } from "./contracts";
+
+export interface ICacheLock {
+    key: string;
+    lockId: number;
+    release: () => Promise<void>;
+}
 
 /**
  * A cache for data persisted between sessions.  Only serializable content should be put here!
@@ -13,6 +20,11 @@ import { ISocketStorageDiscovery, IOdspResolvedUrl } from "./contracts";
  */
 export interface IPersistedCache {
     /**
+     * lock the key for writing
+     */
+    lock(key: string): Promise<ICacheLock>;
+
+    /**
      * Get the cache value of the key
      */
     get(key: string): Promise<any>;
@@ -20,13 +32,13 @@ export interface IPersistedCache {
     /**
      * Delete value in the cache
      */
-    remove(key: string): Promise<void>;
+    remove(key: string, lock: ICacheLock): Promise<void>;
 
     /**
      * Put the value into cache
      * Important - only serializable content is allowed since this cache may be persisted between sessions
      */
-    put(key: string, value: any, expiryTime?: number): Promise<void>;
+    put(key: string, value: any, lock: ICacheLock, expiryTime?: number): Promise<void>;
 }
 
 /**
@@ -70,23 +82,61 @@ class GarbageCollector<TKey> {
  * Default local-only implementation of IPersistedCache,
  * used if no persisted cache is provided by the host
  */
-export class LocalCache implements IPersistedCache {
+export class LocalCache extends EventEmitter implements IPersistedCache {
     private readonly cache = new Map<string, any>();
     private readonly gc: GarbageCollector<string> = new GarbageCollector<string>((key) => this.cache.delete(key));
+    private readonly heldLockIds: Map<string, number> = new Map();
+    private nextLockId: number = 0;
+
+    private lockNow(key: string): ICacheLock {
+        const lock: ICacheLock = {
+            key,
+            lockId: ++this.nextLockId,
+            release: async () => {
+                this.heldLockIds.delete(key);
+                this.emit("lockRelease", key);
+            },
+        };
+        this.heldLockIds.set(key, lock.lockId);
+        return lock;
+    }
+
+    private isLockCurrent(lock: ICacheLock, key: string) {
+        return lock.lockId === this.heldLockIds.get(key);
+    }
+
+    async lock(key: string): Promise<ICacheLock> {
+        if (!this.heldLockIds.has(key)) {
+            return this.lockNow(key);
+        }
+
+        //* todo: add expiration on the lock (where is expiration specificed?)
+        return new Promise((resolve) => {
+            this.on("lockRelease", (releasedKey) => {
+                if (releasedKey === key) {
+                    resolve(this.lockNow(key));
+                }
+            });
+        });
+    }
 
     async get(key: string): Promise<any> {
         return this.cache.get(key);
     }
 
-    async remove(key: string) {
-        this.cache.delete(key);
-        this.gc.cancel(key);
+    async remove(key: string, lock: ICacheLock) {
+        if (this.isLockCurrent(lock, key)) {
+            this.cache.delete(key);
+            this.gc.cancel(key);
+        }
     }
 
-    async put(key: string, value: any, expiryTime?: number) {
-        this.cache.set(key, value);
-        if (expiryTime) {
-            this.gc.schedule(key, expiryTime);
+    async put(key: string, value: any, lock: ICacheLock, expiryTime?: number | undefined) {
+        if (this.isLockCurrent(lock, key)) {
+            this.cache.set(key, value);
+            if (expiryTime) {
+                this.gc.schedule(key, expiryTime);
+            }
         }
     }
 }
