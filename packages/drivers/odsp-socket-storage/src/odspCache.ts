@@ -28,6 +28,7 @@ export interface IConcurrentCache<TKey, TValue, TExpiry> {
         expiry?: TExpiry,
     ): Promise<TValue>;
 
+    //* Question: Would this be expected to await asyncFn, or not? i.e. if asyncFn rejects should this?
     add(
         key: TKey,
         asyncFn: () => Promise<TValue>,
@@ -39,7 +40,10 @@ export interface IConcurrentCache<TKey, TValue, TExpiry> {
     //* addValue
 }
 
-//* Doesn't implement GC (need to update PromiseCache to support per-operation expiry)
+/**
+ * A concise implementation of LocalCache using PromiseCache
+ * //* Doesn't implement GC (need to update PromiseCache to support per-operation expiry)
+ */
 export class LocalCache implements IPersistedCache<number> {
     private readonly pc: PromiseCache<string, any> = new PromiseCache();
     async has(key: string): Promise<boolean> {
@@ -107,6 +111,7 @@ class GarbageCollector<TKey> {
     }
 }
 
+//* For demo purposes only
 interface IAsyncStore {
     get: (key: string) => Promise<any>;
     has: (key: string) => Promise<boolean>;
@@ -188,8 +193,8 @@ export class DemoWithUnderlyingAsyncStore extends EventEmitter implements IPersi
     async add(key: string, asyncFn: () => Promise<any>, expiry?: number | undefined): Promise<boolean> {
         const alreadyPresent = this.has(key);
 
-        // We are blindly adding the Promise to the cache here, which introduces a Promise in this scope.
-        // Swallow Promise rejections here, since whoever gets this out of the cache to use it will await/catch.
+        // We don't want to await the Promise here, but we've introduced a Promise in this scope,
+        // so swallow Promise rejections here, since whoever gets this out of the cache to use it will await/catch.
         this.addOrGet(key, asyncFn, expiry)
             .catch(() => {});
 
