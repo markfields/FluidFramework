@@ -5,7 +5,7 @@
 
 import * as assert from "assert";
 import { EventEmitter } from "events";
-import { PromiseCache, PromiseCacheOptions } from "@microsoft/fluid-common-utils";
+import { PromiseCache } from "@microsoft/fluid-common-utils";
 import { ISocketStorageDiscovery, IOdspResolvedUrl } from "./contracts";
 
 export interface ICacheLock {
@@ -14,7 +14,7 @@ export interface ICacheLock {
     release: () => void;
 }
 
-//* copied from PromiseCache.ts to prove the concept (belongs somewhere else anyway)
+//* This belongs somewhere else. Similar shape to PromiseCache but all functions are async
 export interface IConcurrentCache<TKey, TValue, TExpiry> {
     has(key: TKey): Promise<boolean>;
 
@@ -39,104 +39,7 @@ export interface IConcurrentCache<TKey, TValue, TExpiry> {
     //* addValue
 }
 
-//* copied from PromiseCache.ts to prove the concept
-export class PromiseCache2<TKey, TResult, TExpiry = never> implements IConcurrentCache<TKey, TResult, TExpiry>{
-    private readonly cache = new Map<TKey, Promise<TResult>>();
-
-    private readonly removeOnError: (error: any) => boolean;
-
-    /**
-     * Create the PromiseCache with the given options, with the following defaults:
-     *
-     * expiry: indefinite, removeOnError: true for all errors
-     */
-    constructor({
-        expiry = { policy: "indefinite" },
-        removeOnError = () => true,
-    }: PromiseCacheOptions = {}) {
-        this.removeOnError = removeOnError;
-    }
-
-    /**
-     * Check if there's anything cached at the given key
-     */
-    public async has(key: TKey) {
-        return this.cache.has(key);
-    }
-
-    /**
-     * Get the Promise for the given key, or undefined if it's not found.
-     * Extend expiry if applicable.
-     */
-    public async get(key: TKey): Promise<TResult | undefined> {
-        return this.cache.get(key);
-    }
-
-    /**
-     * Remove the Promise for the given key, returning true if it was found and removed
-     */
-    public async remove(key: TKey) {
-        return this.cache.delete(key);
-    }
-
-    /**
-     * Try to add the result of the given asyncFn, without overwriting an existing cache entry at that key.
-     * Returns a Promise for the added or existing async work being done at that key.
-     * @param key - key name where to store the async work
-     * @param asyncFn - the async work to do and store, if not already in progress under the given key
-     */
-    public async addOrGet(
-        key: TKey,
-        asyncFn: () => Promise<TResult>,
-        expiry?: TExpiry,
-    ): Promise<TResult> {
-        // NOTE: Do not await the Promise returned by asyncFn!
-        // Let the caller do so once we return or after a subsequent call to get
-
-        if (await this.has(key)) {
-            return (await this.get(key))!;
-        }
-
-        // Wrap in an async lambda in case asyncFn disabled @typescript-eslint/promise-function-async
-        const safeAsyncFn = async () => asyncFn();
-
-        // Start the async work and put the Promise in the cache
-        const promise = safeAsyncFn();
-        this.cache.set(key, promise);
-
-        // If asyncFn throws, we may remove the Promise from the cache
-        promise.catch((error) => {
-            if (this.removeOnError(error)) {
-                //* floating promise?
-                this.remove(key);
-            }
-        });
-
-        return promise;
-    }
-
-    /**
-     * Try to add the result of the given asyncFn, without overwriting an existing cache entry at that key.
-     * Returns false if the cache already contained an entry at that key, and true otherwise.
-     * @param key - key name where to store the async work
-     * @param asyncFn - the async work to do and store, if not already in progress under the given key
-     */
-    public async add(
-        key: TKey,
-        asyncFn: () => Promise<TResult>,
-        expiry?: TExpiry,
-    ): Promise<boolean> {
-        const alreadyPresent = await this.has(key);
-
-        // We are blindly adding the Promise to the cache here, which introduces a Promise in this scope.
-        // Swallow Promise rejections here, since whoever gets this out of the cache to use it will await/catch.
-        this.addOrGet(key, asyncFn)
-            .catch(() => {});
-
-        return !alreadyPresent;
-    }
-}
-
+//* Doesn't implement GC (need to update PromiseCache to support per-operation expiry)
 export class LocalCache implements IPersistedCache<number> {
     private readonly pc: PromiseCache<string, any> = new PromiseCache();
     async has(key: string): Promise<boolean> {
@@ -330,6 +233,5 @@ export class OdspCache implements IOdspCache {
     constructor(
         public readonly persistedCache: IPersistedCache<number> = new LocalCache(),
         public readonly persistedCache2: IPersistedCache<number> = new DemoWithUnderlyingAsyncStore(),
-        public readonly persistedCache3: IPersistedCache<number> = new PromiseCache2<string, number, number>(),
     ) {}
 }
