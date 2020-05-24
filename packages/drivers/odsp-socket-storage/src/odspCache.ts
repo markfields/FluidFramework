@@ -8,12 +8,6 @@ import { EventEmitter } from "events";
 import { PromiseCache } from "@microsoft/fluid-common-utils";
 import { ISocketStorageDiscovery, IOdspResolvedUrl } from "./contracts";
 
-export interface ICacheLock {
-    key: string;
-    lockId: number;
-    release: () => void;
-}
-
 /**
  * General purpose interface for working with a cache to protect against race conditions
  */
@@ -120,6 +114,12 @@ interface IAsyncStore {
     has: (key: string) => Promise<boolean>;
     delete: (key: string) => Promise<boolean>;
     set: (key: string, value: any) => Promise<void>;
+}
+
+interface ICacheLock {
+    key: string;
+    lockId: number;
+    release: () => void;
 }
 
 /**
