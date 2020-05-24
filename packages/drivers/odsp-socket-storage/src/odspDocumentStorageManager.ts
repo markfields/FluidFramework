@@ -35,7 +35,7 @@ import { fetchSnapshot } from "./fetchSnapshot";
 import { IFetchWrapper } from "./fetchWrapper";
 import { getQueryString } from "./getQueryString";
 import { getUrlAndHeadersWithAuth } from "./getUrlAndHeadersWithAuth";
-import { IOdspCache, ICacheLock } from "./odspCache";
+import { IOdspCache } from "./odspCache";
 import { getWithRetryForTokenRefresh, throwOdspNetworkError } from "./odspUtils";
 
 /* eslint-disable max-len */
@@ -312,7 +312,7 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                 // result. We are choosing a small time period as the summarizes are generated frequently and if that is the case then we don't
                 // want to use the same getLatest result.
                 const odspSnapshot: IOdspSnapshot =
-                    await this.cache.persistedCache.addOrGet(snapshotCacheKey, fetchAndCacheOdspSnapshot);
+                    await this.cache.persistedCache.addOrGet(snapshotCacheKey, fetchAndCacheOdspSnapshot, 10 * 1000);
 
                 const { trees, tree, blobs, ops, sha } = odspSnapshot;
                 const blobsIdToPathMap: Map<string, string> = new Map();
