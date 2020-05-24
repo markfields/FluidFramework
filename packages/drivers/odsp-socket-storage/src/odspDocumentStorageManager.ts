@@ -223,17 +223,6 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
         return hierarchicalTree;
     }
 
-    //* Consider: Instead of exposing .lock on the cache interface, hide this inside the implementation?
-    private async safePutToPersistedCache<T>(key: string, put: (lock: ICacheLock) => Promise<T>): Promise<T> {
-        let value = await this.cache.persistedCache.get(key);
-        if (value === undefined) {
-            const lock = await this.cache.persistedCache.lock(key);
-            value = await this.cache.persistedCache.get(key) ?? await put(lock);
-            await lock.release();
-        }
-        return value;
-    }
-
     public async getVersions(blobid: string | null, count: number): Promise<api.IVersion[]> {
         // Regular load workflow uses blobId === documentID to indicate "latest".
         if (blobid === this.documentId) {
@@ -287,14 +276,8 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                     this.logger.sendErrorEvent({ eventName: "TreeLatest_SecondCall" });
                 }
 
-                // Note: There's a race condition here - another caller may come past the undefined check
-                // while the first caller is awaiting later async code in this block.
                 const snapshotCacheKey: string = `${this.documentId}/getlatest`;
-                const fetchAndCacheOdspSnapshot = async (lock: ICacheLock) => {
-                    assert(
-                        lock.key === snapshotCacheKey &&
-                        await this.cache.persistedCache.get(snapshotCacheKey) === undefined);
-
+                const fetchAndCacheOdspSnapshot = async () => {
                     const storageToken = await this.getStorageToken(refresh, "TreesLatest");
 
                     // TODO: This snapshot will return deltas, which we currently aren't using. We need to enable this flag to go down the "optimized"
@@ -318,8 +301,6 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                             bodysize: TelemetryLogger.numberFromString(response.headers.get("body-size")),
                         };
                         event.end(props);
-
-                        await this.cache.persistedCache.put(snapshotCacheKey, cachedSnapshot, lock);
                         return cachedSnapshot;
                     } catch (error) {
                         event.cancel({}, error);
@@ -331,7 +312,7 @@ export class OdspDocumentStorageManager implements IDocumentStorageManager {
                 // result. We are choosing a small time period as the summarizes are generated frequently and if that is the case then we don't
                 // want to use the same getLatest result.
                 const odspSnapshot: IOdspSnapshot =
-                    await this.safePutToPersistedCache(snapshotCacheKey, fetchAndCacheOdspSnapshot);
+                    await this.cache.persistedCache.addOrGet(snapshotCacheKey, fetchAndCacheOdspSnapshot);
 
                 const { trees, tree, blobs, ops, sha } = odspSnapshot;
                 const blobsIdToPathMap: Map<string, string> = new Map();

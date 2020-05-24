@@ -3,13 +3,15 @@
  * Licensed under the MIT License.
  */
 
+import { CustomPromisify } from "util";
+
 /**
  * Three supported expiry policies:
  * - indefinite: entries don't expire and must be explicitly removed
  * - absolute: entries expire after the given duration in MS, even if accessed multiple times in the mean time
  * - sliding: entries expire after the given duration in MS of inactivity (i.e. get resets the clock)
  */
-export type PromiseCacheExpiry = {
+export type IPromiseCacheExpiry = {
     policy: "indefinite"
 } | {
     policy: "absolute" | "sliding",
@@ -21,7 +23,7 @@ export type PromiseCacheExpiry = {
  */
 export interface PromiseCacheOptions {
     /** Common expiration policy for all items added to this cache */
-    expiry?: PromiseCacheExpiry,
+    expiry?: IPromiseCacheExpiry,
     /** If the stored Promise is rejected with a particular error, should the given key be removed? */
     removeOnError?: (e: any) => boolean,
 }
@@ -34,7 +36,7 @@ class GarbageCollector<TKey> {
     private readonly gcTimeouts = new Map<TKey, NodeJS.Timeout>();
 
     constructor(
-        private readonly expiry: PromiseCacheExpiry,
+        private readonly expiry: IPromiseCacheExpiry,
         private readonly cleanup: (key: TKey) => void,
     ) {}
 
@@ -76,12 +78,43 @@ class GarbageCollector<TKey> {
     }
 }
 
+export interface IConcurrentCache<TKey, TValue, TExpiry> {
+    has(key: TKey): Promise<boolean>;
+
+    get(key: TKey): Promise<TValue | undefined>;
+
+    remove(key: TKey): Promise<boolean>;
+
+    addOrGet(
+        key: TKey,
+        asyncFn: () => Promise<TValue>,
+        expiry?: TExpiry,
+    ): Promise<TValue>;
+
+    add(
+        key: TKey,
+        asyncFn: () => Promise<TValue>,
+        expiry?: TExpiry,
+    ): Promise<boolean>;
+
+    //* Maybe these too for convenience:
+    //* addValueOrGet
+    //* addValue
+}
+
+export async function test() {
+    const pc = new PromiseCache<string, number>();
+    return pc.addValue("key", 1);
+}
+
 /**
 * A specialized cache for async work, allowing you to safely cache the promised result of some async work
 * without fear of running it multiple times or losing track of errors.
 */
-export class PromiseCache<TKey, TResult> {
+//* todo: Does everything being fully async (due to IConcurrentCache) break PromiseCache?
+export class PromiseCache<TKey, TResult, TExpiry = never> implements IConcurrentCache<TKey, TResult, TExpiry>{
     private readonly cache = new Map<TKey, Promise<TResult>>();
+    //* todo: reimplement gc wtih expiry provided on each add call (always use latest expiry provided)
     private readonly gc: GarbageCollector<TKey>;
 
     private readonly removeOnError: (error: any) => boolean;
@@ -102,7 +135,7 @@ export class PromiseCache<TKey, TResult> {
     /**
      * Check if there's anything cached at the given key
      */
-    public has(key: TKey) {
+    public async has(key: TKey) {
         return this.cache.has(key);
     }
 
@@ -110,8 +143,8 @@ export class PromiseCache<TKey, TResult> {
      * Get the Promise for the given key, or undefined if it's not found.
      * Extend expiry if applicable.
      */
-    public get(key: TKey): Promise<TResult> | undefined {
-        if (this.has(key)) {
+    public async get(key: TKey): Promise<TResult | undefined> {
+        if (await this.has(key)) {
             this.gc.update(key);
         }
         return this.cache.get(key);
@@ -120,7 +153,7 @@ export class PromiseCache<TKey, TResult> {
     /**
      * Remove the Promise for the given key, returning true if it was found and removed
      */
-    public remove(key: TKey) {
+    public async remove(key: TKey) {
         this.gc.cancel(key);
         return this.cache.delete(key);
     }
@@ -134,28 +167,34 @@ export class PromiseCache<TKey, TResult> {
     public async addOrGet(
         key: TKey,
         asyncFn: () => Promise<TResult>,
+        expiry?: TExpiry,
     ): Promise<TResult> {
         // NOTE: Do not await the Promise returned by asyncFn!
         // Let the caller do so once we return or after a subsequent call to get
-        let promise = this.get(key);
-        if (promise === undefined) {
-            // Wrap in an async lambda in case asyncFn disabled @typescript-eslint/promise-function-async
-            const safeAsyncFn = async () => asyncFn();
 
-            // Start the async work and put the Promise in the cache
-            promise = safeAsyncFn();
-            this.cache.set(key, promise);
-
-            // If asyncFn throws, we may remove the Promise from the cache
-            promise.catch((error) => {
-                if (this.removeOnError(error)) {
-                    this.remove(key);
-                }
-            });
-
-            this.gc.schedule(key);
+        //* RACE CONDITION - key could be removed between this.has and this.get
+        //* (maybe this is impossible due to microtask queue but still isn't good)
+        if (await this.has(key)) {
+            const c = await this.get(key);
+            return c;
         }
 
+        // Wrap in an async lambda in case asyncFn disabled @typescript-eslint/promise-function-async
+        const safeAsyncFn = async () => asyncFn();
+
+        // Start the async work and put the Promise in the cache
+        const promise = safeAsyncFn();
+        this.cache.set(key, promise);
+
+        // If asyncFn throws, we may remove the Promise from the cache
+        promise.catch((error) => {
+            if (this.removeOnError(error)) {
+                //* floating promise?
+                this.remove(key);
+            }
+        });
+
+        this.gc.schedule(key);
         return promise;
     }
 
@@ -165,11 +204,12 @@ export class PromiseCache<TKey, TResult> {
      * @param key - key name where to store the async work
      * @param asyncFn - the async work to do and store, if not already in progress under the given key
      */
-    public add(
+    public async add(
         key: TKey,
         asyncFn: () => Promise<TResult>,
-    ): boolean {
-        const alreadyPresent = this.has(key);
+        expiry?: TExpiry,
+    ): Promise<boolean> {
+        const alreadyPresent = await this.has(key);
 
         // We are blindly adding the Promise to the cache here, which introduces a Promise in this scope.
         // Swallow Promise rejections here, since whoever gets this out of the cache to use it will await/catch.
@@ -188,6 +228,7 @@ export class PromiseCache<TKey, TResult> {
     public async addValueOrGet(
         key: TKey,
         value: TResult,
+        expiry?: TExpiry,
     ): Promise<TResult> {
         return this.addOrGet(key, async () => value);
     }
@@ -198,10 +239,11 @@ export class PromiseCache<TKey, TResult> {
      * @param key - key name where to store the value
      * @param value - value to store
      */
-    public addValue(
+    public async addValue(
         key: TKey,
         value: TResult,
-    ): boolean {
+        expiry?: TExpiry,
+    ): Promise<boolean> {
         return this.add(key, async () => value);
     }
 }
