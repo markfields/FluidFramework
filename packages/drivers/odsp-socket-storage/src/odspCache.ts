@@ -63,6 +63,9 @@ export class LocalCache implements IPersistedCache<number> {
  * A cache for data persisted between sessions.  Only serializable content should be put here!
  * This interface may be implemented and provided by the Host, and in order to allow a host
  * to include asynchronous operations in its implementation, each function returns Promise.
+ * 
+ * TExpiry is the way expiration should be specified on each add/addOrGet call.
+ * To remove support for callers specifying expiration, use as IPersistedCache<never>.
  */
 export interface IPersistedCache<TExpiry> extends IConcurrentCache<string, any, TExpiry> {
 }

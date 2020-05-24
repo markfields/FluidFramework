@@ -61,7 +61,7 @@ export class OdspDocumentServiceFactoryWithCodeSplit implements IDocumentService
         private readonly logger: ITelemetryBaseLogger,
         private readonly storageFetchWrapper: IFetchWrapper = new FetchWrapper(),
         private readonly deltasFetchWrapper: IFetchWrapper = new FetchWrapper(),
-        persistedCache?: IPersistedCache,
+        persistedCache?: IPersistedCache<number>,
     ) {
         this.cache = new OdspCache(persistedCache);
     }

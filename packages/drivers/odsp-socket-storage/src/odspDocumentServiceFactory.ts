@@ -57,7 +57,7 @@ export class OdspDocumentServiceFactory implements IDocumentServiceFactory {
         private readonly getWebsocketToken: (refresh: boolean) => Promise<string | null>,
         private readonly storageFetchWrapper: IFetchWrapper = new FetchWrapper(),
         private readonly deltasFetchWrapper: IFetchWrapper = new FetchWrapper(),
-        persistedCache?: IPersistedCache,
+        persistedCache?: IPersistedCache<number>,
     ) {
         this.cache = new OdspCache(persistedCache);
     }
