@@ -14,6 +14,9 @@ export interface ICacheLock {
     release: () => void;
 }
 
+/**
+ * General purpose interface for working with a cache to protect against race conditions
+ */
 //* This belongs somewhere else. Similar shape to PromiseCache but all functions are async
 export interface IConcurrentCache<TKey, TValue, TExpiry> {
     has(key: TKey): Promise<boolean>;
@@ -41,9 +44,20 @@ export interface IConcurrentCache<TKey, TValue, TExpiry> {
 }
 
 /**
- * A concise implementation of LocalCache using PromiseCache
- * //* Doesn't implement GC (need to update PromiseCache to support per-operation expiry)
+ * A cache for data persisted between sessions.  Only serializable content should be put here!
+ * This interface may be implemented and provided by the Host, and in order to allow a host
+ * to include asynchronous operations in its implementation, each function returns Promise.
+ * 
+ * TExpiry is the way expiration should be specified on each add/addOrGet call.
+ * To remove support for callers specifying expiration, use as IPersistedCache<never>.
  */
+export interface IPersistedCache<TExpiry> extends IConcurrentCache<string, any, TExpiry> {
+}
+
+/**
+ * A concise local implementation of IPersistedCache using PromiseCache
+ */
+//* Doesn't implement GC (need to update PromiseCache to support per-operation expiry)
 export class LocalCache implements IPersistedCache<number> {
     private readonly pc: PromiseCache<string, any> = new PromiseCache();
     async has(key: string): Promise<boolean> {
@@ -61,17 +75,6 @@ export class LocalCache implements IPersistedCache<number> {
     async add(key: string, asyncFn: () => Promise<any>, expiry?: number | undefined): Promise<boolean> {
         return this.pc.add(key, asyncFn);
     }
-}
-
-/**
- * A cache for data persisted between sessions.  Only serializable content should be put here!
- * This interface may be implemented and provided by the Host, and in order to allow a host
- * to include asynchronous operations in its implementation, each function returns Promise.
- * 
- * TExpiry is the way expiration should be specified on each add/addOrGet call.
- * To remove support for callers specifying expiration, use as IPersistedCache<never>.
- */
-export interface IPersistedCache<TExpiry> extends IConcurrentCache<string, any, TExpiry> {
 }
 
 /**
@@ -111,7 +114,7 @@ class GarbageCollector<TKey> {
     }
 }
 
-//* For demo purposes only
+//* For demo purposes - Or maybe this is the interface we expect hosts to implement, and we keep the Demo class below
 interface IAsyncStore {
     get: (key: string) => Promise<any>;
     has: (key: string) => Promise<boolean>;
