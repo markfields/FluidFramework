@@ -80,7 +80,7 @@ class GarbageCollector<TKey> {
     private readonly gcTimeouts = new Map<TKey, NodeJS.Timeout>();
 
     constructor(
-        private readonly cleanup: (key: TKey) => void,
+        private readonly cleanup: (key: TKey) => Promise<void>,
     ) {}
 
     /**
@@ -90,7 +90,7 @@ class GarbageCollector<TKey> {
         this.gcTimeouts.set(
             key,
             setTimeout(
-                () => { this.cleanup(key); this.cancel(key); },
+                () => this.cleanup(key).catch(() => {}).finally(() => this.cancel(key)),
                 durationMs,
             ),
         );
@@ -108,14 +108,6 @@ class GarbageCollector<TKey> {
     }
 }
 
-//* For demo purposes - Or maybe this is the interface we expect hosts to implement, and we keep the Demo class below
-interface IAsyncStore {
-    get: (key: string) => Promise<any>;
-    has: (key: string) => Promise<boolean>;
-    delete: (key: string) => Promise<boolean>;
-    set: (key: string, value: any) => Promise<void>;
-}
-
 interface ICacheLock {
     key: string;
     lockId: number;
@@ -123,13 +115,21 @@ interface ICacheLock {
 }
 
 /**
- * Default local-only implementation of IPersistedCache,
- * used if no persisted cache is provided by the host
+ * Interface hosts will implement 
  */
-export class DemoWithUnderlyingAsyncStore extends EventEmitter implements IPersistedCache<number> {
-    private readonly cache: IAsyncStore = null; //* don't bother implementing it
-    //* Btw - GC doesn't properly handle async here
-    private readonly gc: GarbageCollector<string> = new GarbageCollector<string>((key) => this.cache.delete(key));
+interface IAsyncStore {
+    lock: (key: string) => Promise<ICacheLock>;
+    get: (key: string) => Promise<any>;
+    has: (key: string) => Promise<boolean>;
+    delete: (key: string, lock: ICacheLock) => Promise<boolean>;
+    set: (key: string, value: any, lock: ICacheLock) => Promise<void>;
+}
+
+/**
+ * Demo implementation
+ */
+class AsyncMap extends EventEmitter implements IAsyncStore {
+    private map: Map<string, any> = new Map();
     private readonly heldLockIds: Map<string, number> = new Map();
     private nextLockId: number = 0;
 
@@ -147,7 +147,7 @@ export class DemoWithUnderlyingAsyncStore extends EventEmitter implements IPersi
         return lock;
     }
 
-    private async lock(key: string): Promise<ICacheLock> {
+    async lock(key: string): Promise<ICacheLock> {
         if (!this.heldLockIds.has(key)) {
             return this.lockNow(key);
         }
@@ -162,6 +162,33 @@ export class DemoWithUnderlyingAsyncStore extends EventEmitter implements IPersi
         });
     }
 
+    async get(key: string) {
+        return this.map.get(key);
+    }
+
+    async has(key: string) {
+        return this.map.has(key);
+    }
+
+    async delete(key: string, lock: ICacheLock) {
+        assert(lock.lockId === this.heldLockIds[key])
+        return this.map.delete(key);
+    }
+
+    async set(key: string, value: any, lock: ICacheLock) {
+        assert(lock.lockId === this.heldLockIds[key])
+        this.map.set(key, value);
+    }
+}
+
+/**
+ * Default local-only implementation of IPersistedCache,
+ * used if no persisted cache is provided by the host
+ */
+export class DemoWithUnderlyingAsyncStore implements IPersistedCache<number> {
+    private readonly cache: IAsyncStore = new AsyncMap();
+    private readonly gc: GarbageCollector<string> = new GarbageCollector<string>((key) => this.remove(key).then());
+
     async has(key: string): Promise<boolean> {
         return this.cache.has(key);
     }
@@ -171,8 +198,8 @@ export class DemoWithUnderlyingAsyncStore extends EventEmitter implements IPersi
     }
 
     async remove(key: string) {
-        const lock = await this.lock(key);
-        const deleted = await this.cache.delete(key);
+        const lock = await this.cache.lock(key);
+        const deleted = await this.cache.delete(key, lock);
         this.gc.cancel(key);
         lock.release();
 
@@ -182,9 +209,9 @@ export class DemoWithUnderlyingAsyncStore extends EventEmitter implements IPersi
     async addOrGet(key: string, asyncFn: () => Promise<any>, expiry?: number | undefined): Promise<any> {
         let value = await this.cache.get(key);
         if (value === undefined) {
-            const lock = await this.lock(key);
+            const lock = await this.cache.lock(key);
             value = await this.cache.get(key) ?? await asyncFn();
-            await this.cache.set(key, value);
+            await this.cache.set(key, value, lock);
             if (expiry) {
                 this.gc.schedule(key, expiry);
             }
