@@ -39,7 +39,7 @@ const fluidFetchWebNavigator = (url: string) => {
     console.log(`${message}\n  ${url}`);
 };
 
-function createLoader(config: IConfig) {
+function createLoader(config: IConfig, reauth: boolean) {
     // Construct the loader
     const loader = new Loader(
         urlResolver,
@@ -51,6 +51,7 @@ function createLoader(config: IConfig) {
                     fluidFetchWebNavigator,
                     undefined,
                     refresh,
+                    reauth,
                 );
                 return tokens.accessToken;
             },
@@ -61,6 +62,7 @@ function createLoader(config: IConfig) {
                     fluidFetchWebNavigator,
                     undefined,
                     refresh,
+                    reauth,
                 );
                 return tokens.accessToken;
             },
@@ -74,7 +76,7 @@ function createLoader(config: IConfig) {
 }
 
 async function initialize(config: IConfig) {
-    const loader = createLoader(config);
+    const loader = createLoader(config, true /* reauth */);
     const container = await loader.createDetachedContainer(codeDetails);
     container.on("error", (error) => {
         console.log(error);
@@ -91,7 +93,7 @@ async function initialize(config: IConfig) {
 }
 
 async function load(config: IConfig, url: string) {
-    const loader = createLoader(config);
+    const loader = createLoader(config, false /* reauth */);
     const respond = await loader.request({ url });
     // TODO: Error checking
     return respond.value as ILoadTest;
@@ -127,6 +129,7 @@ async function main() {
     if (process.argv[2] === "--spawn") {
         // Use a pre-existing file
         componentUrl = process.argv[3];
+        //* Fetch fresh tokens and cache them (usually done by initialize which will be skipped below)
         nextArg = process.argv[4];
     }
 

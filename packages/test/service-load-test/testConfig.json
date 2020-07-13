@@ -3,9 +3,9 @@
     "driveId": "b!o96WcQ93ck-dT5tlJfA7yZNP3Z9aM69JjJI6U4ASSXmZLLDGFcMBSqJ3iB3y04h0",
     "testConfig": {
         "opRatePerMin": 30,
-        "progressIntervalMs": 15000,
-        "numClients": 240,
-        "totalSendCount": 10000000,
-        "readWriteCycleMs": 30000
+        "progressIntervalMs": 5100,
+        "numClients": 2,
+        "totalSendCount": 10,
+        "readWriteCycleMs": 5000
     }
 }
