@@ -7,6 +7,7 @@ import { IComponentLoadable } from "@fluidframework/component-core-interfaces";
 import { ISequencedDocumentMessage, ITree } from "@fluidframework/protocol-definitions";
 import { IChannelAttributes } from "./storage";
 
+//*
 declare module "@fluidframework/container-definitions" {
     // eslint-disable-next-line @typescript-eslint/no-empty-interface
     interface IComponent extends Readonly<Partial<IProvideChannel>> { }
