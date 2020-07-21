@@ -91,7 +91,8 @@ export class FluidRepo extends FluidRepoBase {
 
     public async symlink(options: ISymlinkOptions) {
         // Only do parallel if we are checking only
-        const result = await this.packages.forEachAsync(pkg => symlinkPackage(this, pkg, this.createPackageMap(), options), !options.symlink);
+        const parallel = !options.symlink
+        const result = await this.packages.forEachAsync(pkg => symlinkPackage(this, pkg, this.createPackageMap(), options), parallel);
         return Packages.clean(result.filter(entry => entry.count).map(entry => entry.pkg), true);
     }
 

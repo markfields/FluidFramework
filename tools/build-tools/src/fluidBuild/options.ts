@@ -88,9 +88,7 @@ function setClean(build: boolean) {
 }
 
 function setBuild(build: boolean) {
-    if (build || options.build === undefined) {
-        options.build = build;
-    }
+    options.build = options.build || build;
 }
 
 function setReinstall(nohoist: boolean) {
