@@ -18,7 +18,8 @@ import {
     OdspTokenConfig,
 } from "@fluidframework/tool-utils";
 import { pkgName, pkgVersion } from "./packageVersion";
-import { ITestConfig, IRunConfig, fluidExport, ILoadTest } from "./loadTestComponent";
+import { ITestConfig, IRunConfig, ILoadTester } from "./dataObjects/loadTester";
+import { fluidExport } from "./containerSpec";
 const packageName = `${pkgName}@${pkgVersion}`;
 
 interface ITestConfigs {
@@ -90,18 +91,18 @@ async function initialize(config: IConfig, password: string) {
     const tenant = `https://${config.server}`;
     const request = urlResolver.createCreateNewRequest(tenant, config.driveId, "/test", "test");
     await container.attach(request);
-    const componentUrl = await container.getAbsoluteUrl("/");
-    console.log(componentUrl);
+    const absoluteRootUrl = await container.getAbsoluteUrl("/");
+    console.log(absoluteRootUrl);
     container.close();
 
-    return componentUrl;
+    return absoluteRootUrl;
 }
 
 async function load(config: IConfig, url: string, password: string) {
     const loader = createLoader(config, password);
     const respond = await loader.request({ url });
     // TODO: Error checking
-    return respond.value as ILoadTest;
+    return respond.value as ILoadTester;
 }
 
 async function main() {

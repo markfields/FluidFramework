@@ -4,7 +4,6 @@
  */
 
 import {
-    ContainerRuntimeFactoryWithDefaultDataStore,
     DataObject,
     DataObjectFactory,
 } from "@fluidframework/aqueduct";
@@ -22,14 +21,14 @@ export interface IRunConfig {
     testConfig: ITestConfig
 }
 
-export interface ILoadTest {
+export interface ILoadTester {
     run(config: IRunConfig): Promise<void>;
 }
 
 const wait = async (timeMs: number) => new Promise((resolve) => setTimeout(resolve, timeMs));
 
-class LoadTestComponent extends DataObject implements ILoadTest {
-    public static ComponentName = "StressTestComponent";
+export class LoadTester extends DataObject implements ILoadTester {
+    public static Name = "LoadTester";
     private opCount = 0;
     private sentCount = 0;
     private state: string = "not started";
@@ -127,14 +126,9 @@ class LoadTestComponent extends DataObject implements ILoadTest {
     }
 }
 
-const LoadTestComponentInstantiationFactory = new DataObjectFactory(
-    LoadTestComponent.ComponentName,
-    LoadTestComponent,
+export const LoadTesterFactory = new DataObjectFactory(
+    LoadTester.Name,
+    LoadTester,
     [],
     {},
-);
-
-export const fluidExport = new ContainerRuntimeFactoryWithDefaultDataStore(
-    LoadTestComponent.ComponentName,
-    new Map([[LoadTestComponent.ComponentName, Promise.resolve(LoadTestComponentInstantiationFactory)]]),
 );
