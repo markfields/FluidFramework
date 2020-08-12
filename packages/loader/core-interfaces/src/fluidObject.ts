@@ -39,13 +39,12 @@ export type Queryable = {
     [P in keyof FluidDataInterfaceCatalog]: (u: unknown) => FluidDataInterfaceCatalog[P] | undefined;
 };
 
-export namespace FluidDataInterfaceCatalog {
-    const _catalog: any = {};
+const _catalog: { [t: string]: (u: any) => any } = {};
 
-    export const register: (t: string) => void = (t: string) => {
-        _catalog[t] = (u: any) => u[t];
-    };
+export const registerDataInterface = (t: string) => {
+    _catalog[t] = (u: any) => u[t];
+};
 
-    export const queryFor: Queryable = _catalog as Queryable;
-}
+export const queryFor = _catalog as Queryable;
+
 /* eslint-enable @typescript-eslint/no-empty-interface */

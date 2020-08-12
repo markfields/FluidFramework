@@ -3,13 +3,6 @@
  * Licensed under the MIT License.
  */
 
- declare module "@fluidframework/core-interfaces" {
-    // eslint-disable-next-line @typescript-eslint/no-empty-interface
-    export interface IFluidObject extends Readonly<Partial<IProvideFoo>> { }
-    // eslint-disable-next-line @typescript-eslint/no-empty-interface
-    export interface FluidDataInterfaceCatalog extends Readonly<IProvideFoo> { }
-}
-
 export const IFoo: keyof IProvideFoo = "IFoo";
 
 export interface IProvideFoo {
@@ -21,7 +14,7 @@ export interface IFoo extends IProvideFoo {
 }
 
 import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
-import { IFluidHandle, IFluidObject, FluidDataInterfaceCatalog } from "@fluidframework/core-interfaces";
+import { IFluidHandle, FluidDataInterfaceCatalog, registerDataInterface } from "@fluidframework/core-interfaces";
 import { SharedCounter } from "@fluidframework/counter";
 import { ITask } from "@fluidframework/runtime-definitions";
 import { IFluidHTMLView } from "@fluidframework/view-interfaces";
@@ -29,13 +22,17 @@ import React from "react";
 import ReactDOM from "react-dom";
 import { ClickerAgent } from "./agent";
 
+declare module "@fluidframework/core-interfaces" {
+    // eslint-disable-next-line @typescript-eslint/no-empty-interface
+    export interface FluidDataInterfaceCatalog extends Readonly<IProvideFoo> { }
+}
+registerDataInterface(IFoo);
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 const pkg = require("../package.json");
 export const ClickerName = pkg.name as string;
 
 const counterKey = "counter";
-
-FluidDataInterfaceCatalog.register(IFoo);
 
 /**
  * Basic Clicker example using new interfaces and stock component classes.
@@ -58,9 +55,8 @@ export class Clicker extends DataObject implements IFluidHTMLView {
         this._counter = await counterHandle.get();
         this.setupAgent();
 
-        const obj: IFluidObject = counterHandle as IFluidObject;
-        console.log(obj.IFoo?.someString);
-        console.log(FluidDataInterfaceCatalog.queryFor.IFoo(obj)?.someString);
+        const foo = FluidDataInterfaceCatalog.queryFor.IFoo(counterHandle)?.someString;
+        console.log(foo);
     }
 
     // #region IFluidHTMLView
