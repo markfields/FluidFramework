@@ -23,4 +23,29 @@ export interface IFluidObject extends
         & IProvideFluidHandle
         & IProvideFluidSerializer>> {
 }
+
+export interface FluidDataInterfaceCatalog extends
+    Readonly<
+        IProvideFluidLoadable
+        & IProvideFluidRunnable
+        & IProvideFluidRouter
+        & IProvideFluidHandleContext
+        & IProvideFluidConfiguration
+        & IProvideFluidHandle
+        & IProvideFluidSerializer> {
+}
+
+export type Queryable = {
+    [P in keyof FluidDataInterfaceCatalog]: (u: unknown) => FluidDataInterfaceCatalog[P] | undefined;
+};
+
+export namespace FluidDataInterfaceCatalog {
+    const _catalog: any = {};
+
+    export const register: (t: string) => void = (t: string) => {
+        _catalog[t] = (u: any) => u[t];
+    };
+
+    export const queryFor: Queryable = _catalog as Queryable;
+}
 /* eslint-enable @typescript-eslint/no-empty-interface */

@@ -3,8 +3,25 @@
  * Licensed under the MIT License.
  */
 
+ declare module "@fluidframework/core-interfaces" {
+    // eslint-disable-next-line @typescript-eslint/no-empty-interface
+    export interface IFluidObject extends Readonly<Partial<IProvideFoo>> { }
+    // eslint-disable-next-line @typescript-eslint/no-empty-interface
+    export interface FluidDataInterfaceCatalog extends Readonly<IProvideFoo> { }
+}
+
+export const IFoo: keyof IProvideFoo = "IFoo";
+
+export interface IProvideFoo {
+    readonly IFoo: IFoo;
+}
+
+export interface IFoo extends IProvideFoo {
+    someString: string;
+}
+
 import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
-import { IFluidHandle } from "@fluidframework/core-interfaces";
+import { IFluidHandle, IFluidObject, FluidDataInterfaceCatalog } from "@fluidframework/core-interfaces";
 import { SharedCounter } from "@fluidframework/counter";
 import { ITask } from "@fluidframework/runtime-definitions";
 import { IFluidHTMLView } from "@fluidframework/view-interfaces";
@@ -17,6 +34,8 @@ const pkg = require("../package.json");
 export const ClickerName = pkg.name as string;
 
 const counterKey = "counter";
+
+FluidDataInterfaceCatalog.register(IFoo);
 
 /**
  * Basic Clicker example using new interfaces and stock component classes.
@@ -38,6 +57,10 @@ export class Clicker extends DataObject implements IFluidHTMLView {
         const counterHandle = this.root.get<IFluidHandle<SharedCounter>>(counterKey);
         this._counter = await counterHandle.get();
         this.setupAgent();
+
+        const obj: IFluidObject = counterHandle as IFluidObject;
+        console.log(obj.IFoo?.someString);
+        console.log(FluidDataInterfaceCatalog.queryFor.IFoo(obj)?.someString);
     }
 
     // #region IFluidHTMLView
