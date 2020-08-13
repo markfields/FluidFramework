@@ -11,6 +11,7 @@ import { Loader } from "@fluidframework/container-loader";
 import { OdspDocumentServiceFactory, OdspDriverUrlResolver } from "@fluidframework/odsp-driver";
 import { LocalCodeLoader } from "@fluidframework/test-utils";
 
+import { unreachableCase } from "@fluidframework/common-utils";
 import {
     OdspTokenManager,
     odspTokensCache,
@@ -18,20 +19,17 @@ import {
     OdspTokenConfig,
 } from "@fluidframework/tool-utils";
 import { pkgName, pkgVersion } from "./packageVersion";
-import { ITestConfig, IRunConfig, ILoadTester } from "./dataObjects/loadTester";
+import { ILoadTestRunConfig, ILoadTester } from "./dataObjects/loadTester";
+import { ISmokeTestRunConfig, ISmokeTester } from "./dataObjects/smokeTester";
+import { ConfigTestProfiles, AnyTestProfile } from "./testProfiles";
 import { fluidExport } from "./containerSpec";
 const packageName = `${pkgName}@${pkgVersion}`;
-
-interface ITestConfigs {
-    full: ITestConfig,
-    mini: ITestConfig,
-}
 
 interface IConfig {
     server: string,
     driveId: string,
     username: string,
-    profiles: ITestConfigs,
+    profiles: ConfigTestProfiles,
 }
 
 const codeDetails: IFluidCodeDetails = {
@@ -100,10 +98,14 @@ async function initialize(config: IConfig, password: string) {
 
 async function load(config: IConfig, url: string, password: string) {
     const loader = createLoader(config, password);
-    const respond = await loader.request({ url });
-    // TODO: Error checking
-    return respond.value as ILoadTester;
+    const response = await loader.request({ url });
+    return response.value;
 }
+
+/** Check that the profile arg is found in the profiles member of the config file */
+const validateProfileArg = (configFromFile: IConfig, profileArg: string): profileArg is keyof ConfigTestProfiles =>
+    // Note that we haven't validated the file's schema itself so this isn't bulletproof
+    configFromFile.profiles[profileArg] !== undefined;
 
 async function main() {
     let config: IConfig;
@@ -130,10 +132,11 @@ async function main() {
     const runId: number | undefined = commander.runId === undefined ? undefined : parseInt(commander.runId, 10);
     const debug: true | undefined = commander.debug;
 
-    if (config.profiles[profile] === undefined) {
-        console.error("Invalid --profile argument not found in testConfig.json profiles");
+    if (!validateProfileArg(config, profile)) {
+        console.error("Invalid --profile argument: Not found in testConfig.json profiles");
         process.exit(-1);
     }
+    const profileObj: AnyTestProfile = config.profiles[profile];
 
     // When runId is specified, kick off a single test runner and exit when it's finished
     if (runId !== undefined) {
@@ -141,12 +144,32 @@ async function main() {
             console.error("Missing --url argument needed to run child process");
             process.exit(-1);
         }
-        const runConfig: IRunConfig = {
-            runId,
-            testConfig: config.profiles[profile],
-        };
-        const stressTest = await load(config, url, password);
-        await stressTest.run(runConfig);
+
+        switch (profileObj.type) {
+            case "stress": {
+                const runConfig: ILoadTestRunConfig = {
+                    runId,
+                    testProfile: profileObj,
+                };
+                // ToDo - Validate capabilities via IFluidObject before casting
+                const loadTester = await load(config, url, password) as ILoadTester;
+                await loadTester.run(runConfig);
+                break;
+            }
+            case "smoke": {
+                const runConfig: ISmokeTestRunConfig = {
+                    runId,
+                    testProfile: profileObj,
+                };
+                // ToDo - Validate capabilities via IFluidObject before casting
+                const smokeTester = await load(config, url, password) as ISmokeTester;
+                await smokeTester.run(runConfig);
+                break;
+            }
+            default:
+                unreachableCase(profileObj);
+        }
+
         process.exit(0);
     }
 

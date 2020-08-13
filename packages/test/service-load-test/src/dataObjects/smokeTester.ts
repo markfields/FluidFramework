@@ -7,15 +7,21 @@ import {
     DataObject,
     DataObjectFactory,
 } from "@fluidframework/aqueduct";
+import { SmokeTestProfile } from "../testProfiles";
+
+export interface ISmokeTestRunConfig {
+    runId: number,
+    testProfile: SmokeTestProfile
+}
 
 export interface ISmokeTester {
-    run(): Promise<void>;
+    run(config: ISmokeTestRunConfig): Promise<void>;
 }
 
 export class SmokeTester extends DataObject implements ISmokeTester {
     public static Name: string = "SmokeTester";
 
-    public async run(): Promise<void> {
+    public async run(config: ISmokeTestRunConfig): Promise<void> {
         throw new Error("Method not implemented.");
     }
 }

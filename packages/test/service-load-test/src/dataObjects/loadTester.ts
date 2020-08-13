@@ -7,22 +7,15 @@ import {
     DataObject,
     DataObjectFactory,
 } from "@fluidframework/aqueduct";
+import { LoadTestProfile } from "../testProfiles";
 
-export interface ITestConfig {
-    opRatePerMin: number,
-    progressIntervalMs: number,
-    numClients: number,
-    totalSendCount: number,
-    readWriteCycleMs: number,
-}
-
-export interface IRunConfig {
+export interface ILoadTestRunConfig {
     runId: number,
-    testConfig: ITestConfig
+    testProfile: LoadTestProfile
 }
 
 export interface ILoadTester {
-    run(config: IRunConfig): Promise<void>;
+    run(config: ILoadTestRunConfig): Promise<void>;
 }
 
 const wait = async (timeMs: number) => new Promise((resolve) => setTimeout(resolve, timeMs));
@@ -46,7 +39,7 @@ export class LoadTester extends DataObject implements ILoadTester {
         return Date.now() - startTimeMs;
     }
 
-    private printStatus(config: IRunConfig, startTimeMs: number, runningStartTimeMs: number) {
+    private printStatus(config: ILoadTestRunConfig, startTimeMs: number, runningStartTimeMs: number) {
         const now = Date.now();
         const totalMin = (now - startTimeMs) / 60000;
         const runningMin = (now - runningStartTimeMs) / 60000;
@@ -61,14 +54,14 @@ export class LoadTester extends DataObject implements ILoadTester {
         );
     }
 
-    public async run(config: IRunConfig) {
+    public async run(config: ILoadTestRunConfig) {
         console.log(`${config.runId.toString().padStart(3)}> waiting`);
         await new Promise((resolve) => {
             let memberCount = this.context.getQuorum().getMembers().size;
-            if (memberCount >= config.testConfig.numClients) { resolve(); }
+            if (memberCount >= config.testProfile.numClients) { resolve(); }
             this.context.getQuorum().on("addMember", () => {
                 memberCount++;
-                if (memberCount >= config.testConfig.numClients) { resolve(); }
+                if (memberCount >= config.testProfile.numClients) { resolve(); }
             });
         });
         console.log(`${config.runId.toString().padStart(3)}> begin`);
@@ -78,11 +71,11 @@ export class LoadTester extends DataObject implements ILoadTester {
         // To set that up we start each client in a staggered way, each will independently go thru write
         // and listen cycles
 
-        const cycleMs = config.testConfig.readWriteCycleMs;
+        const cycleMs = config.testProfile.readWriteCycleMs;
 
         // the time gap to start each client over two cycles  (or one full read/write cycle)
         // to get half the client active at a time
-        const clientStartGapMs = cycleMs * 2 / config.testConfig.numClients;
+        const clientStartGapMs = cycleMs * 2 / config.testProfile.numClients;
 
         const startTimeMs = Date.now();
         let runningStartTimeMs = startTimeMs + await this.pause(config.runId * clientStartGapMs);
@@ -94,12 +87,12 @@ export class LoadTester extends DataObject implements ILoadTester {
             if (this.state !== "paused") {
                 this.printStatus(config, startTimeMs, runningStartTimeMs);
             }
-            t = setTimeout(printProgress, config.testConfig.progressIntervalMs);
+            t = setTimeout(printProgress, config.testProfile.progressIntervalMs);
         };
-        t = setTimeout(printProgress, config.testConfig.progressIntervalMs);
+        t = setTimeout(printProgress, config.testProfile.progressIntervalMs);
 
-        const clientSendCount = config.testConfig.totalSendCount / config.testConfig.numClients;
-        const opsPerCycle = config.testConfig.opRatePerMin * cycleMs / 60000;
+        const clientSendCount = config.testProfile.totalSendCount / config.testProfile.numClients;
+        const opsPerCycle = config.testProfile.opRatePerMin * cycleMs / 60000;
         const opsGapMs = cycleMs / opsPerCycle;
         while (this.sentCount < clientSendCount) {
             await this.runStep();
