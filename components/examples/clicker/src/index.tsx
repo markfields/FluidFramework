@@ -3,18 +3,28 @@
  * Licensed under the MIT License.
  */
 
+export interface Queryable<T> {
+    queryFor: T;
+}
+
 export const IFoo: keyof IProvideFoo = "IFoo";
 
 export interface IProvideFoo {
     readonly IFoo: IFoo;
 }
 
-export interface IFoo extends IProvideFoo {
+export interface IFoo extends Queryable<IProvideFoo> {
     someString: string;
 }
 
+export class Foo implements IFoo {
+    queryFor: IProvideFoo = { IFoo: this };
+    // queryFor = queryable(IFoo, this as IFoo);
+    someString: string = "hello";
+}
+
 import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
-import { IFluidHandle, FluidDataInterfaceCatalog, registerDataInterface } from "@fluidframework/core-interfaces";
+import { IFluidHandle, FluidDataInterfaceCatalog } from "@fluidframework/core-interfaces";
 import { SharedCounter } from "@fluidframework/counter";
 import { ITask } from "@fluidframework/runtime-definitions";
 import { IFluidHTMLView } from "@fluidframework/view-interfaces";
@@ -26,7 +36,10 @@ declare module "@fluidframework/core-interfaces" {
     // eslint-disable-next-line @typescript-eslint/no-empty-interface
     export interface FluidDataInterfaceCatalog extends Readonly<IProvideFoo> { }
 }
-registerDataInterface(IFoo);
+
+export interface IFluidObject2 {
+    queryFor?: Partial<FluidDataInterfaceCatalog>;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 const pkg = require("../package.json");
@@ -55,8 +68,14 @@ export class Clicker extends DataObject implements IFluidHTMLView {
         this._counter = await counterHandle.get();
         this.setupAgent();
 
-        const foo = FluidDataInterfaceCatalog.queryFor.IFoo(counterHandle)?.someString;
-        console.log(foo);
+        const fluidObject = counterHandle as IFluidObject2;
+        const foo = fluidObject.queryFor?.IFoo;
+        if (foo !== undefined) {
+            console.log(foo.someString);
+        }
+
+        const something = FluidDataInterfaceCatalog.queryFor.IFoo(counterHandle)?.someString;
+        console.log(something);
     }
 
     // #region IFluidHTMLView
