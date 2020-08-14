@@ -3,10 +3,6 @@
  * Licensed under the MIT License.
  */
 
-export interface Queryable<T> {
-    queryFor: T;
-}
-
 export const IFoo: keyof IProvideFoo = "IFoo";
 
 export interface IProvideFoo {
@@ -18,13 +14,12 @@ export interface IFoo extends Queryable<IProvideFoo> {
 }
 
 export class Foo implements IFoo {
-    queryFor: IProvideFoo = { IFoo: this };
-    // queryFor = queryable(IFoo, this as IFoo);
+    queryFor: IProvideFoo = { IFoo: this };  // This is the weirdest part, but is only weird to implementers so that's good.
     someString: string = "hello";
 }
 
 import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
-import { IFluidHandle, FluidDataInterfaceCatalog } from "@fluidframework/core-interfaces";
+import { IFluidHandle, FluidDataInterfaceCatalog, IFluidObject, Queryable } from "@fluidframework/core-interfaces";
 import { SharedCounter } from "@fluidframework/counter";
 import { ITask } from "@fluidframework/runtime-definitions";
 import { IFluidHTMLView } from "@fluidframework/view-interfaces";
@@ -35,10 +30,6 @@ import { ClickerAgent } from "./agent";
 declare module "@fluidframework/core-interfaces" {
     // eslint-disable-next-line @typescript-eslint/no-empty-interface
     export interface FluidDataInterfaceCatalog extends Readonly<IProvideFoo> { }
-}
-
-export interface IFluidObject2 {
-    queryFor?: Partial<FluidDataInterfaceCatalog>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
@@ -68,7 +59,7 @@ export class Clicker extends DataObject implements IFluidHTMLView {
         this._counter = await counterHandle.get();
         this.setupAgent();
 
-        const fluidObject = counterHandle as IFluidObject2;
+        const fluidObject = counterHandle as IFluidObject;
         const foo = fluidObject.queryFor?.IFoo;
         if (foo !== undefined) {
             console.log(foo.someString);

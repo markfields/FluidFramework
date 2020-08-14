@@ -13,16 +13,16 @@ import { IProvideFluidHandle, IProvideFluidHandleContext } from "./handles";
 import { IProvideFluidSerializer } from "./serializer";
 
 /* eslint-disable @typescript-eslint/no-empty-interface */
-export interface IFluidObject extends
-    Readonly<Partial<
-        IProvideFluidLoadable
-        & IProvideFluidRunnable
-        & IProvideFluidRouter
-        & IProvideFluidHandleContext
-        & IProvideFluidConfiguration
-        & IProvideFluidHandle
-        & IProvideFluidSerializer>> {
-}
+// export interface IFluidObject extends
+//     Readonly<Partial<
+//         IProvideFluidLoadable
+//         & IProvideFluidRunnable
+//         & IProvideFluidRouter
+//         & IProvideFluidHandleContext
+//         & IProvideFluidConfiguration
+//         & IProvideFluidHandle
+//         & IProvideFluidSerializer>> {
+// }
 
 export interface FluidDataInterfaceCatalog extends
     Readonly<
@@ -35,16 +35,12 @@ export interface FluidDataInterfaceCatalog extends
         & IProvideFluidSerializer> {
 }
 
-export type Queryable = {
-    [P in keyof FluidDataInterfaceCatalog]: (u: unknown) => FluidDataInterfaceCatalog[P] | undefined;
-};
+export interface IFluidObject {
+    queryFor?: Partial<FluidDataInterfaceCatalog>;
+}
 
-const _catalog: { [t: string]: (u: any) => any } = {};
-
-export const registerDataInterface = (t: string) => {
-    _catalog[t] = (u: any) => u[t];
-};
-
-export const queryFor = _catalog as Queryable;
+export interface Queryable<T> {
+    queryFor: T;
+}
 
 /* eslint-enable @typescript-eslint/no-empty-interface */
