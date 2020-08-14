@@ -25,6 +25,17 @@ import { ConfigTestProfiles, AnyTestProfile } from "./testProfiles";
 import { fluidExport } from "./containerSpec";
 const packageName = `${pkgName}@${pkgVersion}`;
 
+//* Do the IFluidObject thing
+
+//* Implemented by ILoadTester and ISmokeTester, returning a little helper class that checks the profile type and data object type(???)
+export interface IProvideTestRunner {
+    readonly ITestRunner: ITestRunner;
+}
+
+export interface ITestRunner {
+    run(config: ILoadTestRunConfig): Promise<void> //* switch to generic run config type
+}
+
 interface IConfig {
     server: string,
     driveId: string,
@@ -145,6 +156,7 @@ async function main() {
             process.exit(-1);
         }
 
+        //* Move to TestRunner impl of ITestRunner
         switch (profileObj.type) {
             case "stress": {
                 const runConfig: ILoadTestRunConfig = {
