@@ -3,6 +3,18 @@
  * Licensed under the MIT License.
  */
 
+import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
+import { IFluidHandle, FluidDataInterfaceCatalog, IFluidObject, Queryable } from "@fluidframework/core-interfaces";
+import { SharedCounter } from "@fluidframework/counter";
+import { ITask } from "@fluidframework/runtime-definitions";
+import { IFluidHTMLView } from "@fluidframework/view-interfaces";
+import React from "react";
+import ReactDOM from "react-dom";
+import { ClickerAgent } from "./agent";
+
+// ///////////////////////////
+// Example  IFoo interface
+// ///////////////////////////
 export const IFoo: keyof IProvideFoo = "IFoo";
 
 export interface IProvideFoo {
@@ -14,23 +26,18 @@ export interface IFoo extends Queryable<IProvideFoo> {
 }
 
 export class Foo implements IFoo {
-    queryFor: IProvideFoo = { IFoo: this };  // This is the weirdest part, but is only weird to implementers so that's good.
+    // This is the weirdest part, but is only weird to implementers so that's good.
+    queryFor: IProvideFoo = { IFoo: this };
+
     someString: string = "hello";
 }
-
-import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
-import { IFluidHandle, FluidDataInterfaceCatalog, IFluidObject, Queryable } from "@fluidframework/core-interfaces";
-import { SharedCounter } from "@fluidframework/counter";
-import { ITask } from "@fluidframework/runtime-definitions";
-import { IFluidHTMLView } from "@fluidframework/view-interfaces";
-import React from "react";
-import ReactDOM from "react-dom";
-import { ClickerAgent } from "./agent";
 
 declare module "@fluidframework/core-interfaces" {
     // eslint-disable-next-line @typescript-eslint/no-empty-interface
     export interface FluidDataInterfaceCatalog extends Readonly<IProvideFoo> { }
 }
+
+// //////////////////////////////
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 const pkg = require("../package.json");
@@ -64,9 +71,6 @@ export class Clicker extends DataObject implements IFluidHTMLView {
         if (foo !== undefined) {
             console.log(foo.someString);
         }
-
-        const something = FluidDataInterfaceCatalog.queryFor.IFoo(counterHandle)?.someString;
-        console.log(something);
     }
 
     // #region IFluidHTMLView

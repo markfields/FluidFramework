@@ -5,7 +5,7 @@
 
 // when merging declarations the module path must match exactly. Because of this we need to explicitly export
 // IFluidObject as opposed to an export *
-export { IFluidObject, FluidDataInterfaceCatalog, registerDataInterface, queryFor } from "./fluidObject";
+export { IFluidObject, FluidDataInterfaceCatalog, Queryable } from "./fluidObject";
 
 export * from "./fluidLoadable";
 export * from "./fluidRouter";
