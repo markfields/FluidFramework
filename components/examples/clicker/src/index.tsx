@@ -4,7 +4,18 @@
  */
 
 import { DataObject, DataObjectFactory } from "@fluidframework/aqueduct";
-import { IFluidHandle, FluidDataInterfaceCatalog, IFluidObject, Queryable } from "@fluidframework/core-interfaces";
+import {
+    IFluidObject,
+    IFluidObject1,
+    FluidDataInterfaceCatalog,
+    Queryable,
+    queryObject2,
+    QueryableObject2,
+    queryObject3,
+    QueryableObject3,
+    queryObject4,
+    IFluidObject4,
+} from "@fluidframework/core-interfaces";
 import { SharedCounter } from "@fluidframework/counter";
 import { ITask } from "@fluidframework/runtime-definitions";
 import { IFluidHTMLView } from "@fluidframework/view-interfaces";
@@ -13,7 +24,7 @@ import ReactDOM from "react-dom";
 import { ClickerAgent } from "./agent";
 
 // ///////////////////////////
-// Example  IFoo interface
+// Example IFoo interface
 // ///////////////////////////
 export const IFoo: keyof IProvideFoo = "IFoo";
 
@@ -21,13 +32,16 @@ export interface IProvideFoo {
     readonly IFoo: IFoo;
 }
 
+//* Add forInterface to this interface
 export interface IFoo extends Queryable<IProvideFoo> {
     someString: string;
 }
 
 export class Foo implements IFoo {
-    // This is the weirdest part, but is only weird to implementers so that's good.
+    // OPTION 1
     queryFor: IProvideFoo = { IFoo: this };
+    // OPTION 2
+    forInterface: IProvideFoo = { IFoo: this };
 
     someString: string = "hello";
 }
@@ -66,6 +80,9 @@ export class Clicker extends DataObject implements IFluidHTMLView {
         this._counter = await counterHandle.get();
         this.setupAgent();
 
+        const foo2 = queryObject2(counterHandle).forInterface.IFluidRouter;
+        const foo4 = queryObject4(counterHandle).IFoo;
+        foo4!.
         const fluidObject = counterHandle as IFluidObject;
         const foo = fluidObject.queryFor?.IFoo;
         if (foo !== undefined) {
