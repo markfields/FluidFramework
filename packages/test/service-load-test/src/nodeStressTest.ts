@@ -27,7 +27,8 @@ const packageName = `${pkgName}@${pkgVersion}`;
 
 //* Do the IFluidObject thing
 
-//* Implemented by ILoadTester and ISmokeTester, returning a little helper class that checks the profile type and data object type(???)
+//* Implemented by ILoadTester and ISmokeTester,
+//* returning a little helper class that checks the profile type and data object type(???)
 export interface IProvideTestRunner {
     readonly ITestRunner: ITestRunner;
 }
