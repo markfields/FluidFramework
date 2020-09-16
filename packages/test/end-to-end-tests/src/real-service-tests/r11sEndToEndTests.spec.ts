@@ -105,6 +105,7 @@ const passwordTokenConfig = (username, password): OdspTokenConfig => ({
 });
 
 //* Pass in somehow (env variables?)
+//* And move into ODSP-relevant scope
 const odspServer = "a830edad9050849829E20060408.sharepoint.com";
 const odspDriveId = "b!o96WcQ93ck-dT5tlJfA7yZNP3Z9aM69JjJI6U4ASSXmZLLDGFcMBSqJ3iB3y04h0";
 const odspUsername = "user0@a830edad9050849829E20060408.onmicrosoft.com";
@@ -157,6 +158,7 @@ function createOdspHarness(): ServiceHarness {
 }
 
 function runTests(r11s: boolean) {
+    const serviceName: string = r11s ? "r11s" : "ODSP";
     describe(`Real Service End-To-End tests`, () => {
         let request: IRequest;
         let loader: Loader;
@@ -177,7 +179,7 @@ function runTests(r11s: boolean) {
             loader = harness.loader;
         });
 
-        it("Container creation in r11s", async () => {
+        it(`Container creation in ${serviceName}`, async () => {
             const container = await loader.createDetachedContainer(codeDetails);
             assert.strictEqual(container.attachState, AttachState.Detached, "Container should be detached");
             await container.attach(request);
@@ -186,7 +188,7 @@ function runTests(r11s: boolean) {
             assert.strictEqual(container.deltaManager.inbound.length, 0, "Inbound queue should be empty");
         });
 
-        it("Load attached container and check for components", async () => {
+        it(`Load attached container and check for components in ${serviceName}`, async () => {
             const container = await loader.createDetachedContainer(codeDetails);
             // Get the root component from the detached container.
             const response = await container.request({ url: "/" });
@@ -223,7 +225,7 @@ function runTests(r11s: boolean) {
                 "Value for isAttached should persist!!");
         });
 
-        it("Fire ops during container attach for shared map", async () => {
+        it(`Fire ops during container attach for shared map in ${serviceName}`, async () => {
             const ops = { key: "1", type: "set", value: { type: "Plain", value: "b" } };
             const defPromise = new Deferred();
             const container = await loader.createDetachedContainer(codeDetails);
@@ -255,5 +257,6 @@ function runTests(r11s: boolean) {
     });
 }
 
+//* switch to enum, and add Tinylicious
 runTests(true);
 runTests(false);
