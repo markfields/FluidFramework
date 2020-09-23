@@ -9,7 +9,7 @@ import uuid from "uuid";
 import { IRequest } from "@fluidframework/core-interfaces";
 import { IFluidCodeDetails, IProxyLoaderFactory, AttachState } from "@fluidframework/container-definitions";
 import { Loader } from "@fluidframework/container-loader";
-import { IUrlResolver } from "@fluidframework/driver-definitions";
+import { IDocumentServiceFactory, IUrlResolver } from "@fluidframework/driver-definitions";
 import {
     LocalCodeLoader,
     TestFluidObjectFactory,
