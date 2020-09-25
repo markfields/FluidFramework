@@ -159,6 +159,7 @@ function createOdspHarness(): ServiceHarness {
 
 function runTests(r11s: boolean) {
     const serviceName: string = r11s ? "r11s" : "ODSP";
+    console.log(`TOP    (${r11s} | ${serviceName})`);
     describe(`Real Service End-To-End tests`, () => {
         let request: IRequest;
         let loader: Loader;
@@ -173,6 +174,7 @@ function runTests(r11s: boolean) {
         });
 
         beforeEach(async () => {
+            console.log(`BEFORE (${r11s} | ${serviceName})`);
             const harness = r11s ? createR11sHarness() : createOdspHarness();
             const documentId = moniker.choose();
             request = harness.urlResolver.createCreateNewRequest(documentId);
@@ -180,15 +182,17 @@ function runTests(r11s: boolean) {
         });
 
         it(`Container creation in ${serviceName}`, async () => {
+            console.log(`  1    (${r11s} | ${serviceName})`);
             const container = await loader.createDetachedContainer(codeDetails);
             assert.strictEqual(container.attachState, AttachState.Detached, "Container should be detached");
             await container.attach(request);
-            assert.strictEqual(container.attachState, AttachState.Attached, "Container should now be created on r11s");
+            assert.strictEqual(container.attachState, AttachState.Attached, "Container should now be created");
             assert.strictEqual(container.closed, false, "Container should be open");
             assert.strictEqual(container.deltaManager.inbound.length, 0, "Inbound queue should be empty");
         });
 
         it(`Load attached container and check for components in ${serviceName}`, async () => {
+            console.log(`  2    (${r11s} | ${serviceName})`);
             const container = await loader.createDetachedContainer(codeDetails);
             // Get the root component from the detached container.
             const response = await container.request({ url: "/" });
@@ -202,7 +206,7 @@ function runTests(r11s: boolean) {
             await container.attach(request);
 
             // Now load the container from another loader.
-            const harness2 = createR11sHarness();
+            const harness2 = r11s ? createR11sHarness() : createOdspHarness();
             const loader2 = harness2.loader;
             const urlResolver2 = harness2.urlResolver;
             // Create a new request url from the resolvedUrl of the first container.
@@ -226,6 +230,7 @@ function runTests(r11s: boolean) {
         });
 
         it(`Fire ops during container attach for shared map in ${serviceName}`, async () => {
+            console.log(`  3    (${r11s} | ${serviceName})`);
             const ops = { key: "1", type: "set", value: { type: "Plain", value: "b" } };
             const defPromise = new Deferred();
             const container = await loader.createDetachedContainer(codeDetails);
@@ -258,5 +263,5 @@ function runTests(r11s: boolean) {
 }
 
 //* switch to enum, and add Tinylicious
-runTests(true);
+//* runTests(true);
 runTests(false);
