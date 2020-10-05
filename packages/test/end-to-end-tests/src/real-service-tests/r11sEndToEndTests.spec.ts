@@ -146,6 +146,7 @@ function createOdspHarness(): ServiceHarness {
                 getMicrosoftConfiguration(),
                 passwordTokenConfig(odspUsername, odspPassword),
                 refresh,
+                true /* forceReauth - see https://github.com/microsoft/FluidFramework/issues/2733 */,
             );
             return tokens.accessToken;
         },
@@ -253,9 +254,12 @@ function runTests(r11s: boolean) {
             testChannel1.set("0", "a");
             const containerP = container.attach(request);
 
+            //* TESTING -- REMOVE
+            await containerP;
+
             // Fire op after the summary is taken and before it is attached.
             testChannel1.set("1", "b");
-            await containerP;
+            // await containerP;
 
             await defPromise.promise;
         });
