@@ -89,7 +89,6 @@ stages:
         pool: ${{ parameters.poolBuild }}
         variables:
           testCoverage: ${{ and(eq(parameters.taskTest, 'ci:test'), ne(variables['Build.Reason'], 'PullRequest')) }}
-          releaseBuildVar: $[variables.releaseBuild]
         steps:
         # Setup
         - checkout: self
@@ -106,9 +105,6 @@ stages:
               # Show all task group conditions
 
               echo "
-              Pipeline Variables:
-                releaseBuild=$(releaseBuildVar)
-
               Override Parameters:
                 publishOverride=${{ parameters.publishOverride }}
                 releaseBuildOverride=${{ parameters.releaseBuildOverride }}

@@ -110,7 +110,6 @@ stages:
     variables:
       buildBase: ${{ or(ne(parameters.test, ''), or(eq(parameters.pack, true), or(eq(parameters.lint, true), eq(parameters.docs, true)))) }}
       testCoverage: ${{ and(eq(parameters.test, 'ci:test'), ne(variables['Build.Reason'], 'PullRequest')) }}
-      releaseBuildVar: $[variables.releaseBuild]
       containerTagSuffix: $(SetVersion.version)
     steps:
     # Setup
@@ -128,9 +127,6 @@ stages:
           # Show all task group conditions
 
           echo "
-          Pipeline Variables:
-            releaseBuild=$(releaseBuildVar)
-
           Override Parameters:
             publishOverride=${{ parameters.publishOverride }}
             releaseBuildOverride=${{ parameters.releaseBuildOverride }}
