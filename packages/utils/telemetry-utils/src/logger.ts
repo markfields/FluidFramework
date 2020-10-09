@@ -58,24 +58,15 @@ export abstract class TelemetryLogger implements ITelemetryLogger {
             // for failed request, including all the headers, and thus - user tokens!
             // Extract only call stack, message, and couple network-related properties form error object
 
-            const errorAsObject = error as {
-                stack?: string;
-                message?: string;
-            };
+            const customError = error as Partial<CustomErrorWithProps>;
 
-            event.stack = errorAsObject.stack;
-            event.error = errorAsObject.message;
+            event.stack = customError.stack;
+            event.error = customError.message;
 
-            // Error message can container PII information.
-            // If we know for sure it does, we have to not log it.
-            if (error.containsPII) {
-                event.error = "Error message was removed as it contained PII";
-            } else if (error.getCustomProperties) {
-                const customProps: ITelemetryProperties = error.getCustomProperties();
-                for (const key of Object.keys(customProps)) {
-                    if (event[key] === undefined) {
-                        event[key] = customProps[key];
-                    }
+            const customProps = customError.getCustomProperties?.() ?? {};
+            for (const key of Object.keys(customProps)) {
+                if (event[key] === undefined) {
+                    event[key] = customProps[key];
                 }
             }
         }
@@ -464,13 +455,15 @@ export class PerformanceEvent {
  * Helper class for error tracking.
  * Object of this instance will record all of their properties when logged with logger.
  * Care needs to be taken not to log PII information!
+ * Callers may only put PII in the pii member via the constructor which will be stripped out when properties are queried
  * Logger ignores all properties from any other error objects (not being instance of CustomErrorWithProps),
  * with exception of 'message' & 'stack' properties if they exists on error object.
- * In other words, logger logs only what it knows about and has good confidence it does not container PII information.
+ * In other words, logger logs only what it knows about and has good confidence it does not contain PII information.
  */
 export class CustomErrorWithProps extends Error {
     constructor(
         message: string,
+        private pii?: any, // On here to be accessible during debugging but removed before logging
         props?: ITelemetryProperties,
     ) {
         super(message);
@@ -484,6 +477,8 @@ export class CustomErrorWithProps extends Error {
         for (const key of Object.getOwnPropertyNames(this)) {
             props[key] = this[key];
         }
+        // Remove pii member
+        (props as unknown as CustomErrorWithProps).pii = undefined;
         return props;
     }
 }
