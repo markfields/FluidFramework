@@ -32,31 +32,6 @@ describe("ToDo", () => {
         expect(result).toBeTruthy();
     });
 
-    test("todo item can have nested clicker", async () => {
-        // Add item
-        await expect(page).toFill("input[name=itemName]", "ToDoClicker");
-        await expect(page).toClick("button[name=createItem]");
-
-        // Expand subitems and add clicker
-        await expect(page).toClick("button[name=toggleInnerVisible]");
-        await expect(page).toClick("button", { text: "clicker" });
-
-        // Check clicker exists
-        const foundClicker = await page.evaluate(() => {
-            const clicker = document.body.querySelector(".clicker-value-class");
-            return clicker !== null && clicker !== undefined;
-        });
-        expect(foundClicker).toBeTruthy();
-
-        // Hide subitems and check clicker disappears
-        await expect(page).toClick("button[name=toggleInnerVisible]");
-        const hiddenClicker = await page.evaluate(() => {
-            const clicker = document.body.querySelector(".clicker-value-class");
-            return clicker === null || clicker === undefined;
-        });
-        expect(hiddenClicker).toBeTruthy();
-    });
-
     test("todo item can nest multiple todo items", async () => {
         // Add item
         await expect(page).toFill("input[name=itemName]", "ToDoNested1");

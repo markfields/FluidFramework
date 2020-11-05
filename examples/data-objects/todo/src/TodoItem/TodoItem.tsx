@@ -3,7 +3,6 @@
  * Licensed under the MIT License.
  */
 
-import { ClickerInstantiationFactory } from "@fluid-example/clicker";
 import { DataObject, DataObjectFactory, waitForAttach } from "@fluidframework/aqueduct";
 import { ISharedCell, SharedCell } from "@fluidframework/cell";
 import {
@@ -121,7 +120,6 @@ export class TodoItem extends DataObject<{}, ITodoItemInitialState> implements I
         new Map([
             TextBoxInstantiationFactory.registryEntry,
             TextListInstantiationFactory.registryEntry,
-            ClickerInstantiationFactory.registryEntry,
         ]),
     );
 
@@ -178,9 +176,6 @@ export class TodoItem extends DataObject<{}, ITodoItemInitialState> implements I
                     this.context,
                     { startingText: type },
                 );
-                break;
-            case "clicker":
-                component = await ClickerInstantiationFactory.createChildInstance(this.context);
                 break;
             case "textBox":
                 component = await TextBoxInstantiationFactory.createChildInstance(this.context, type);

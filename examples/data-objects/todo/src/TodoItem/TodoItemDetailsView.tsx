@@ -57,7 +57,6 @@ export class TodoItemDetailsView extends React.Component<TodoItemDetailsViewProp
             return (
                 <>
                     <button onClick={async () => this.createInnerComponent("todo")}>todo</button>
-                    <button onClick={async () => this.createInnerComponent("clicker")}>clicker</button>
                     <button onClick={async () => this.createInnerComponent("textBox")}>textBox</button>
                     <button onClick={async () => this.createInnerComponent("textList")}>textList</button>
                 </>
