@@ -1656,21 +1656,21 @@ export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents>
         let notBoundContextsLength: number;
         do {
             const builderTree = builder.summary.tree;
-            notBoundContextsLength = this.datastoreContexts.notBoundContexts.size;
+            notBoundContextsLength = this.datastoreContexts.notBoundLength();
             // Iterate over each data store and ask it to snapshot
-            Array.from(this.datastoreContexts)
-                .filter(([key, _]) =>
+            Array.from(this.datastoreContexts.allContexts)
+                .filter(([key, cb]) =>
                     // Take summary of bounded data stores only, make sure we haven't summarized them already
                     // and no attach op has been fired for that data store because for loader versions <= 0.24
                     // we set attach state as "attaching" before taking createNew summary.
-                    !(this.datastoreContexts.notBoundContexts.has(key)
-                        || builderTree[key]
-                        || this.attachOpFiredForDataStore.has(key)),
+                    cb.bound
+                        && !builderTree[key]
+                        && !this.attachOpFiredForDataStore.has(key),
                 )
-                .map(([key, value]) => {
+                .map(([key, cb]) => {
                     let dataStoreSummary: ISummarizeResult;
-                    if (value.isLoaded) {
-                        const snapshot = value.generateAttachMessage().snapshot;
+                    if (cb.context.isLoaded) {
+                        const snapshot = cb.context.generateAttachMessage().snapshot;
                         dataStoreSummary = convertToSummaryTree(snapshot, true);
                     } else {
                         // If this data store is not yet loaded, then there should be no changes in the snapshot from
@@ -1681,7 +1681,7 @@ export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents>
                     }
                     builder.addWithStats(key, dataStoreSummary);
                 });
-        } while (notBoundContextsLength !== this.datastoreContexts.notBoundContexts.size);
+        } while (notBoundContextsLength !== this.datastoreContexts.notBoundLength());
 
         this.serializeContainerBlobs(builder);
 

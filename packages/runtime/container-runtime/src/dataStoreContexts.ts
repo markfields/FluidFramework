@@ -10,7 +10,7 @@ import { ChildLogger } from "@fluidframework/telemetry-utils";
 import { FluidDataStoreContext } from "./dataStoreContext";
 
  export class DataStoreContexts extends EventEmitter implements Iterable<[string,FluidDataStoreContext]>, IDisposable {
-    public readonly notBoundContexts = new Set<string>();
+    private readonly notBoundContexts = new Set<string>();
 
     // Attached and loaded context proxies
     private readonly _contexts = new Map<string, FluidDataStoreContext>();
@@ -56,6 +56,14 @@ import { FluidDataStoreContext } from "./dataStoreContext";
         return this._contexts.has(id);
     }
 
+    public notBoundLength() {
+        return Array.from(this.allContexts)
+            .filter(([_, cb]) => {
+                return !cb.bound;
+            })
+            .length;
+    }
+
     public async getContextUponBinding(id: string) {
         return this.pendingBindPs.addOrGet(id, this.waitForContextBind(id));
     }
@@ -76,8 +84,7 @@ import { FluidDataStoreContext } from "./dataStoreContext";
                     rej(new Error("bind called for missing context"));
                     return;
                 }
-                cb.bound = true;
-                this.allContexts.set(id, cb);
+                this.allContexts.set(id, { ...cb, bound: true });
                 res(cb.context);
             }
         });
