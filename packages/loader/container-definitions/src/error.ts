@@ -53,7 +53,7 @@ export type ICriticalContainerError = IErrorBase;
  */
 export interface IGenericError extends IErrorBase {
     readonly errorType: ContainerErrorType.genericError;
-    error?: any;
+    innerError?: any;
 }
 
 /**
@@ -62,4 +62,12 @@ export interface IGenericError extends IErrorBase {
 export interface IThrottlingWarning extends IErrorBase {
     readonly errorType: ContainerErrorType.throttlingError;
     readonly retryAfterSeconds: number;
+}
+
+/**
+ * Error indicating a problem with data integrity
+ */
+export interface IDataCorruptionError extends IErrorBase {
+    readonly errorType: ContainerErrorType.dataCorruptionError;
+    readonly canRetry: false;
 }

@@ -21,29 +21,41 @@ function messageFromError(error: any) {
     return `${error}`;
 }
 
+/** Type guard for IErrorBase */
+export const IsIErrorBase = (error: any): error is IErrorBase =>
+    ("errorType" in error) && ("message" in error);
+
 /**
  * Generic error
  */
 export class GenericError extends LoggingError implements IGenericError {
     readonly errorType = ContainerErrorType.genericError;
 
+    /**
+     * Create a wrapper for an error of unknown origin
+     * @param message - message from innerError (see function messageFromError)
+     * @param props - Properties pulled off the error that are safe to log
+     * @param innerError - intact error object we are wrapping. Should not be logged as-is
+     */
     constructor(
-        errorMessage: string,
-        readonly error: any,
+        message: string,
+        props?: ITelemetryProperties,
+        readonly innerError?: any,
     ) {
-        super(errorMessage);
+        super(message, props);
     }
 }
 
+//* implements IDataCorruptionError
 export class DataCorruptionError extends LoggingError implements IErrorBase {
     readonly errorType = ContainerErrorType.dataCorruptionError;
     readonly canRetry = false;
 
     constructor(
-        errorMessage: string,
-        props: ITelemetryProperties,
+        message: string,
+        props?: ITelemetryProperties,
     ) {
-        super(errorMessage, props);
+        super(message, props);
     }
 }
 
@@ -51,28 +63,27 @@ export class DataCorruptionError extends LoggingError implements IErrorBase {
  * Convert the error into one of the error types.
  * @param error - Error to be converted.
  */
-export function CreateContainerError(error: any): ICriticalContainerError {
+export function CreateContainerError(error: any): ICriticalContainerError & LoggingError {
     assert(error !== undefined);
 
     if (typeof error === "object" && error !== null) {
-        const err = error;
-        if (error.errorType !== undefined && error instanceof LoggingError) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-            return err;
+        if (IsIErrorBase(error) && error instanceof LoggingError) {
+            return error;
         }
 
-        // Only get properties we know about.
-        // Grabbing all properties will expose PII in telemetry!
-        return new LoggingError(
+        if (IsIErrorBase(error)) {
+            return new LoggingError(
+                error.message,
+                { errorType: error.errorType, stack: (error as any).stack },
+            ) as IErrorBase & LoggingError;
+        }
+        // Note - Only the message and stack will be logged, the error itself (as GenericError.innerError) will not be
+        return new GenericError(
             messageFromError(error),
-            {
-                errorType: error.errorType ?? ContainerErrorType.genericError,
-                stack: error.stack,
-            },
-        ) as any as IGenericError;
-    } else if (typeof error === "string") {
-        return new GenericError(error, new Error(error));
+            { stack: error.stack },
+            error,
+        );
     } else {
-        return new GenericError(messageFromError(error), error);
+        return new GenericError(messageFromError(error));
     }
 }

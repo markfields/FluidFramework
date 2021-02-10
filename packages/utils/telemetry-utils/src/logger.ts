@@ -467,7 +467,7 @@ export class PerformanceEvent {
  *   when logged with a logger.
  * - Logger ignores all properties from any other error objects (not being instance of LoggingError), with exception of
  *   'message' & 'stack' properties if they exists on error object.
- * - In other words, logger logs only what it knows about and has good confidence it does not container PII information.
+ * - In other words, logger logs only what it knows about and has good confidence it does not contain PII information.
  */
 export class LoggingError extends Error {
     constructor(
