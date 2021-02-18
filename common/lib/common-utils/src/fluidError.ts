@@ -47,7 +47,7 @@ export class ExternalFluidError extends FluidError {
         super("External Error");
 
         this.addDetails({}, { innerError: err });
-        if (err.stack !== undefined && err.stack !== "") {
+        if (err?.stack !== undefined && err.stack !== "") {
             this.stack = err.stack;
         }
     }
