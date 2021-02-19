@@ -46,7 +46,11 @@ import {
     createGenericNetworkError,
     getRetryDelayFromError,
 } from "@fluidframework/driver-utils";
-import { CreateContainerError, DataCorruptionError } from "@fluidframework/container-utils";
+import {
+    CreateContainerError,
+    CreateProcessingError,
+    DataCorruptionError,
+} from "@fluidframework/container-utils";
 import { debug } from "./debug";
 import { DeltaQueue } from "./deltaQueue";
 import { logNetworkFailure, waitForConnectedState } from "./networkUtils";
@@ -387,7 +391,7 @@ export class DeltaManager
             });
 
         this._inbound.on("error", (error) => {
-            this.close(CreateContainerError(error));
+            this.close(CreateProcessingError(error, {}));
         });
 
         // Outbound message queue. The outbound queue is represented as a queue of an array of ops. Ops contained
@@ -737,15 +741,21 @@ export class DeltaManager
 
         let requests = 0;
         let deltaStorage: IDocumentDeltaStorageService | undefined;
+        let lastSuccessTime: number | undefined;
 
         while (!this.closed) {
             const maxFetchTo = from + MaxBatchDeltas;
             const fetchTo = to === undefined ? maxFetchTo : Math.min(maxFetchTo, to);
 
             let deltasRetrievedLast = 0;
-            let success = true;
             let canRetry = false;
             let retryAfter: number | undefined;
+            let delay: number;
+
+            // Calculate delay for next iteration if request fails or we get no ops.
+            // If request succeeds and returns some ops, we will reset these variables.
+            retry++;
+            delay = retryAfter ?? Math.min(MaxFetchDelaySeconds, MissingFetchDelaySeconds * Math.pow(2, retry));
 
             try {
                 // Connect to the delta storage endpoint
@@ -795,9 +805,39 @@ export class DeltaManager
                 // Attempt to fetch more deltas. If we didn't receive any in the previous call we up our retry
                 // count since something prevented us from seeing those deltas
                 from = lastFetch;
+
+                if (deltasRetrievedLast !== 0) {
+                    // If we are getting some ops, reset all counters.
+                    delay = 0;
+                    retry = 0;
+                    lastSuccessTime = undefined;
+                } else if (lastSuccessTime === undefined) {
+                    lastSuccessTime = Date.now();
+                } else if (Date.now() - lastSuccessTime > 30000) {
+                    // If we are connected and receiving proper responses from server, but can't get any ops back,
+                    // then give up after some time. This likely indicates the issue with ordering service not flushing
+                    // ops to storage quick enough, and possibly waiting for summaries, while summarizer can't get
+                    // current as it can't get ops.
+                    telemetryEvent.cancel({
+                        category: "error",
+                        error: "too many retries",
+                        retry,
+                        requests,
+                        deltasRetrievedTotal,
+                        replayFrom: from,
+                        to,
+                    });
+                    this.close(createGenericNetworkError(
+                        "Failed to retrieve ops from storage: giving up after too many retries",
+                        false /* canRetry */,
+                    ));
+                    return;
+                }
             } catch (origError) {
                 canRetry = canRetry && canRetryOnError(origError);
                 const error = CreateContainerError(origError);
+
+                lastSuccessTime = undefined;
 
                 logNetworkFailure(
                     this.logger,
@@ -806,7 +846,7 @@ export class DeltaManager
                         fetchTo,
                         from,
                         requests,
-                        retry: retry + 1,
+                        retry,
                     },
                     origError);
 
@@ -816,7 +856,6 @@ export class DeltaManager
                     this.close(error);
                     return;
                 }
-                success = false;
                 retryAfter = getRetryDelayFromError(origError);
 
                 if (retryAfter !== undefined && retryAfter >= 0) {
@@ -835,38 +874,6 @@ export class DeltaManager
                 return;
             }
 
-            let delay: number;
-            if (deltasRetrievedLast !== 0) {
-                delay = 0;
-                retry = 0; // start calculating timeout over if we got some ops
-            } else {
-                retry++;
-                delay = retryAfter ?? Math.min(MaxFetchDelaySeconds, MissingFetchDelaySeconds * Math.pow(2, retry));
-
-                // Chances that we will get something from storage after that many retries is zero.
-                // We wait 10 seconds between most of retries, so that's 16 minutes of waiting!
-                // Note - it's very important that we differentiate connected state from possibly disconnected state!
-                // Only bail out if we successfully connected to storage, but there were no ops
-                // One (last) successful connection is sufficient, even if user was disconnected all prior attempts
-                if (success && retry >= 100) {
-                    telemetryEvent.cancel({
-                        category: "error",
-                        error: "too many retries",
-                        retry,
-                        requests,
-                        deltasRetrievedTotal,
-                        replayFrom: from,
-                        to,
-                    });
-                    const closeError = createGenericNetworkError(
-                        "Failed to retrieve ops from storage: giving up after too many retries",
-                        false /* canRetry */,
-                    );
-                    this.close(closeError);
-                    return;
-                }
-            }
-
             telemetryEvent.reportProgress({
                 delay, // seconds
                 deltasRetrievedLast,
@@ -874,7 +881,7 @@ export class DeltaManager
                 replayFrom: from,
                 requests,
                 retry,
-                success,
+                success: lastSuccessTime !== undefined,
             });
 
             await waitForConnectedState(delay * 1000);
