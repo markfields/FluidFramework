@@ -56,6 +56,7 @@ class LoadTestDataStore extends DataObject implements ILoadTest {
     }
 
     public async run(config: IRunConfig) {
+        //* Consider removing this "waiting" stage
         // Wait for all runners to join
         console.log(`${config.runId.toString().padStart(3)}> waiting`);
         await new Promise<void>((resolve) => {
@@ -97,13 +98,15 @@ class LoadTestDataStore extends DataObject implements ILoadTest {
         const opsPerCycle = config.testConfig.opRatePerMin * cycleMs / 60000;
         const opsGapMs = cycleMs / opsPerCycle;
         while (this.sentCount < clientSendCount) {
-            await this.runStep();
-            // Send cycle worth of Ops
+            //* What happens if we're disconnected when this calls root.set?
+            this.runStep();
             if (this.sentCount % opsPerCycle === 0) {
+                this.maybeToggleConnection();
                 // Pause writing for cycle before resuming
                 runningStartTimeMs += await this.pause(cycleMs);
+                this.maybeToggleConnection();
             } else {
-                // Random jitter of +- 50% of opWaitMs
+                // Random jitter of +- 50% of opsGapMs
                 await wait(opsGapMs + opsGapMs * (Math.random() - 0.5));
             }
         }
@@ -115,7 +118,15 @@ class LoadTestDataStore extends DataObject implements ILoadTest {
         console.log(`${config.runId.toString().padStart(3)}> finished`);
     }
 
-    public async runStep() {
+    private maybeToggleConnection() {
+        //* Move to config
+        const toggleChance = 0.5;
+        if (Math.random() < toggleChance) {
+            //* switch to disconnected or connected and update this.state
+        }
+    }
+
+    public runStep() {
         this.root.set(Math.floor(Math.random() * 32).toString(), Math.random());
         this.sentCount++;
     }
