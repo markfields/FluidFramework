@@ -22,14 +22,16 @@ function setKeepAlive() {
     Axios.defaults.httpAgent = new http.Agent({ keepAlive: true });
 }
 
+// Extracts the type of the config param of a given createFromEnv function
 export type CreateFromEnvConfigParam<T extends (config: any, ...args: any) => any> =
-    T extends (config: infer P, ...args: any) => any ? P : never;
+    T extends ((config: infer P, ...args: any) => any) ? P : never;
 
 export async function createFluidTestDriver(
     fluidTestDriverType: TestDriverTypes,
     config?: {
         odsp?: CreateFromEnvConfigParam<typeof OdspTestDriver.createFromEnv>,
-    }) {
+    },
+) {
     switch (fluidTestDriverType) {
         case "local":
             return new LocalServerTestDriver();

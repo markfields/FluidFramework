@@ -66,7 +66,7 @@ async function load(testDriver: ITestDriver, testId: string) {
 }
 
 const createTestDriver =
-    async (driver: TestDriverTypes) => createFluidTestDriver(driver,{
+    async (driver: TestDriverTypes) => createFluidTestDriver(driver, {
         odsp: {
             directory: "stress",
         },

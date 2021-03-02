@@ -44,8 +44,9 @@ interface IOdspTestDriverConfig extends TokenConfig{
 }
 
 export class OdspTestDriver implements ITestDriver {
+    public static readonly x: number = 324;
     public static async createFromEnv(
-        config?: {directory?: string, username?: string},
+        config?: { directory?: string, username?: string },
     ) {
         const loginAccounts = process.env.login__odsp__test__accounts;
         assert(loginAccounts !== undefined, "Missing login__odsp__test__accounts");
