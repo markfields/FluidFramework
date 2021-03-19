@@ -81,7 +81,7 @@ describe(`Dehydrate Rehydrate Container Test`, () => {
             urlResolver: driver.createUrlResolver(),
             documentServiceFactory,
             codeLoader,
-            logger: ChildLogger.create(getTestLogger(), undefined, {all: {testDriverType: driver.type}}),
+            logger: getTestLogger(),
         });
         loaderContainerTracker.add(testLoader);
         return testLoader;

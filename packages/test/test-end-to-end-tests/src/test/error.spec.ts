@@ -63,7 +63,7 @@ describe("Errors Types", () => {
             urlResolver,
             documentServiceFactory: mockFactory,
             codeLoader,
-            logger: ChildLogger.create(getTestLogger(), undefined, {all: {testDriverType: driver.type}}),
+            logger: getTestLogger(),
         });
         loaderContainerTracker.add(loader);
 

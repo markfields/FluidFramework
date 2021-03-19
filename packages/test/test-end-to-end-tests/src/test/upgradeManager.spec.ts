@@ -53,7 +53,7 @@ describe("UpgradeManager (hot-swap)", () => {
             documentServiceFactory: driver.createDocumentServiceFactory(),
             codeLoader,
             options: { hotSwapContext: true },
-            logger: ChildLogger.create(getTestLogger(), undefined, {all: {testDriverType: driver.type}}),
+            logger: getTestLogger(),
         });
 
         return createAndAttachContainer(
@@ -68,7 +68,7 @@ describe("UpgradeManager (hot-swap)", () => {
             documentServiceFactory: driver.createDocumentServiceFactory(),
             codeLoader,
             options: { hotSwapContext: true },
-            logger: ChildLogger.create(getTestLogger(), undefined, {all: {testDriverType: driver.type}}),
+            logger: getTestLogger(),
         });
 
         return loader.resolve({ url: await driver.createContainerUrl(documentId) });
