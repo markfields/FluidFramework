@@ -1,0 +1,334 @@
+# Query: sendErrorEvent
+# Flags: CaseSensitive WordMatch
+# Including: *.ts
+# Excluding: *.spec.ts
+# ContextLines: 1
+
+74 results - 34 files
+
+common\lib\common-definitions\src\logger.ts:
+  109       */
+  110:     sendErrorEvent(event: ITelemetryErrorEvent, error?: any): void;
+  111  
+
+common\lib\common-utils\src\logger.ts:
+  38      }
+  39:     public sendErrorEvent(event: ITelemetryErrorEvent, error?: any) {
+  40      }
+
+packages\dds\matrix\src\matrix.ts:
+  594          } catch (error) {
+  595:             this.logger.sendErrorEvent({ eventName: "MatrixLoadFailed" }, error);
+  596          }
+
+packages\dds\merge-tree\src\snapshotlegacy.ts:
+  231          if (this.header.segmentsTotalLength != totalLength) {
+  232:             this.logger.sendErrorEvent({
+  233                  eventName: "SegmentsTotalLengthMismatch",
+
+packages\dds\merge-tree\src\snapshotLoader.ts:
+  51          catchupOpsP.catch(
+  52:             (err)=>this.logger.sendErrorEvent({ eventName: "CatchupOpsLoadFailure" },err));
+  53  
+
+packages\dds\ordered-collection\src\consensusOrderedCollection.ts:
+  258              }).catch((error) => {
+  259:                 this.runtime.logger.sendErrorEvent({ eventName: "ConsensusQueue_release" }, error);
+  260              });
+
+packages\dds\sequence\src\sequence.ts:
+  130          this.loadedDeferred.promise.catch((error)=>{
+  131:             this.logger.sendErrorEvent({ eventName: "SequenceLoadFailed" }, error);
+  132          });
+
+packages\drivers\driver-base\src\documentDeltaConnection.ts:
+  265              // OdspDocumentDeltaConnection.disconnect() due to not expectting two calls.
+  266:             this.logger.sendErrorEvent(
+  267                  {
+
+packages\drivers\odsp-driver\src\epochTracker.ts:
+   85          } catch (error) {
+   86:             this.logger.sendErrorEvent({ eventName: "cacheFetchError", type: entry.type }, error);
+   87              return undefined;
+
+   99              .catch((error) => {
+  100:                 this.logger.sendErrorEvent({ eventName: "cachePutError", type: entry.type }, error);
+  101                  throw error;
+
+  108          } catch (error) {
+  109:             this.logger.sendErrorEvent({ eventName: "removeCacheEntries" }, error);
+  110          }
+
+  261                  });
+  262:                 this.logger.sendErrorEvent({ eventName: "fileOverwrittenInStorage" }, epochError);
+  263                  // If the epoch mismatches, then clear all entries for such file entry from cache.
+
+  269              // time is 1s.
+  270:             this.logger.sendErrorEvent({ eventName: "Coherency409" }, error);
+  271              throw new ThrottlingError(error.errorMessage ?? "Coherency409", 1);
+
+packages\drivers\odsp-driver\src\fetchSnapshot.ts:
+   87              // Execute the redeem fallback
+   88:             logger.sendErrorEvent({
+   89                  eventName: "RedeemFallback",
+
+  151              // If we get incorrect / expired token first time, that adds up to latency of boot
+  152:             logger.sendErrorEvent({
+  153                  eventName: "TreeLatest_SecondCall",
+
+  270                      || seqNumberFromOps !== undefined && seqNumberFromOps !== sequenceNumber) {
+  271:                     logger.sendErrorEvent({ eventName: "fetchSnapshotError", sequenceNumber, seqNumberFromOps });
+  272                      value.sequenceNumber = undefined;
+
+packages\drivers\odsp-driver\src\odspDocumentStorageManager.ts:
+  346                          if (cacheControl === undefined || !(cacheControl.includes("private") || cacheControl.includes("public"))) {
+  347:                             this.logger.sendErrorEvent({
+  348                                  eventName: "NonCacheableBlob",
+
+  625              if ((errorType === OdspErrorType.snapshotTooBig || errorType === OdspErrorType.fetchTimeout) && snapshotOptions.blobs) {
+  626:                 this.logger.sendErrorEvent({
+  627                      eventName: "TreeLatest_SecondCall",
+
+packages\drivers\odsp-driver\src\odspDriverUrlResolverForShareLink.ts:
+  193          }).catch((error) => {
+  194:             this.logger.sendErrorEvent({ eventName: "FluidFileUrlError" }, error);
+  195              this.sharingLinkCache.remove(key);
+
+packages\drivers\routerlicious-driver\src\restWrapper.ts:
+   47                  // Unknown error, treat as critical error and immediately throw as non-retriable
+   48:                 this.logger.sendErrorEvent({
+   49                      eventName: "CriticalRequestError",
+
+  131          } catch (e) {
+  132:             logger.sendErrorEvent({
+  133                  eventName: "R11sRestWrapperLoadFailure",
+
+  169          } catch (e) {
+  170:             logger.sendErrorEvent({
+  171                  eventName: "R11sRestWrapperLoadFailure",
+
+packages\hosts\base-host\src\utils.ts:
+  104              // The proposal we're tracking is not the first. It should've been rejected but we missed our chance.
+  105:             this.logger.sendErrorEvent({
+  106                  eventName: "ProposalOutOfOrder",
+
+packages\loader\container-loader\src\connectionStateHandler.ts:
+  159              // Already in the desired state - exit early
+  160:             this.logger.sendErrorEvent({ eventName: "setConnectionStateSame", value });
+  161              return;
+
+packages\loader\container-loader\src\container.ts:
+   654                  if (this.attachState !== AttachState.Attached) {
+   655:                     this.logger.sendErrorEvent({
+   656                          eventName: "NoRealStorageInDetachedContainer",
+
+   712              }).catch((error) =>  {
+   713:                 this.logger.sendErrorEvent({ eventName: "RaiseConnectedEventError" }, error);
+   714              });
+
+   751              // knowledge as old ops are processed when data stores / DDS are re-hydrated when delay-loaded
+   752:             this.logger.sendErrorEvent(
+   753                  {
+
+   893          } catch (ex) {
+   894:             this.logger.sendErrorEvent({ eventName: "SnapshotExceptionError" }, ex);
+   895              throw ex;
+
+  1439          protocol.quorum.on("error", (error) => {
+  1440:             protocolLogger.sendErrorEvent(error);
+  1441          });
+
+  1464                      if (!isFluidCodeDetails(value)) {
+  1465:                         this.logger.sendErrorEvent({
+  1466                                  eventName: "CodeProposalNotIFluidCodeDetails",
+
+  1732          if (this.connectionState !== ConnectionState.Connected) {
+  1733:             this.logger.sendErrorEvent({ eventName: "SubmitMessageWithNoConnection", type });
+  1734              return -1;
+
+  1810              // We should have a defined version to load from if specified version requested
+  1811:             this.logger.sendErrorEvent({ eventName: "NoVersionFoundWhenSpecified", id: specifiedVersion });
+  1812          }
+
+  1816          if (snapshot === undefined && version !== undefined) {
+  1817:             this.logger.sendErrorEvent({ eventName: "getSnapshotTreeFailed", id: version.id });
+  1818          }
+
+  1830          if (this._dirtyContainer) {
+  1831:             this.logger.sendErrorEvent({ eventName: "DirtyContainerReloadContainer"});
+  1832          }
+
+  1876      private logContainerError(warning: ContainerWarning) {
+  1877:         this.logger.sendErrorEvent({ eventName: "ContainerWarning" }, warning);
+  1878      }
+
+packages\loader\container-loader\src\deltaManager.ts:
+   556              if (!this.closed) {
+   557:                 this.logger.sendErrorEvent({ eventName: "ConnectException" }, err);
+   558              }
+
+   799          } else {
+   800:             this.logger.sendErrorEvent({ eventName: "submitSignalDisconnected" });
+   801          }
+
+   966          if (this.reconnectMode !== ReconnectMode.Enabled) {
+   967:             this.logger.sendErrorEvent({
+   968                  eventName: "NackWithNoReconnect",
+
+  1482          } catch (error) {
+  1483:             this.logger.sendErrorEvent({eventName: "GetDeltas_Exception"}, error);
+  1484              this.close(CreateContainerError(error));
+
+packages\loader\driver-utils\src\blobAggregationStorage.ts:
+  237          return this.readBlob(id).catch((error) => {
+  238:             this.logger.sendErrorEvent({ eventName: "BlobDedupNoAggregateBlob" }, error);
+  239              throw error;
+
+packages\loader\driver-utils\src\parallelRequests.ts:
+  192                  if (payload.length !== 0) {
+  193:                     this.logger.sendErrorEvent({
+  194                          eventName: "ParallelRequests_GotExtra",
+
+packages\loader\driver-utils\src\runWithRetry.ts:
+  44              if (!canRetryOnError(err)) {
+  45:                 logger.sendErrorEvent({
+  46                      eventName: fetchCallName,
+
+packages\runtime\agent-scheduler\src\scheduler.ts:
+  222                  await Promise.all(tasks).catch((error) => {
+  223:                     this.sendErrorEvent("AgentScheduler_RemoveMemberError", error);
+  224                  });
+
+  253              }).catch((error) => {
+  254:                 this.sendErrorEvent("AgentScheduler_clearRunningTasks", error);
+  255              });
+
+  269          if (worker === undefined) {
+  270:             this.sendErrorEvent("AgentScheduler_UnwantedChange", undefined, key);
+  271          }
+
+  274              worker().catch((error) => {
+  275:                 this.sendErrorEvent("AgentScheduler_FailedWork", error, key);
+  276              });
+
+  341          Promise.all(tasks).catch((error) => {
+  342:             this.sendErrorEvent("AgentScheduler_InitError", error);
+  343          });
+
+  360  
+  361:     private sendErrorEvent(eventName: string, error: any, key?: string) {
+  362:         this.runtime.logger.sendErrorEvent({ eventName, key }, error);
+  363      }
+
+packages\runtime\container-runtime\src\containerRuntime.ts:
+   585              // Disabling noisy telemetry until customers have had some time to migrate
+   586:             // logger.sendErrorEvent({ eventName: "UsedAddGlobalAgentSchedulerAndLeaderElection" });
+   587          }
+
+   897              if (this.summaryCollection.opsSinceLastAck > maxOpsSinceLastSummary) {
+   898:                 this.logger.sendErrorEvent({eventName: "SummaryStatus:Behind"});
+   899                  // unregister default to no log on every op after falling behind
+
+  1164          if (this.dirtyContainer) {
+  1165:             this.logger.sendErrorEvent({ eventName: "DirtyContainerReloadRuntime"});
+  1166          }
+
+  1939          if (middleOfBatch) {
+  1940:             this._logger.sendErrorEvent({ eventName: "submitSystemMessageError", type });
+  1941          }
+
+packages\runtime\container-runtime\src\dataStoreContext.ts:
+  255              }).catch((error) => {
+  256:                 this.logger.sendErrorEvent(
+  257                      { eventName: "ChannelDisposeError", fluidDataStoreId: this.id },
+
+packages\runtime\container-runtime\src\dataStoreContexts.ts:
+  31              }).catch((contextError) => {
+  32:                 this._logger.sendErrorEvent({
+  33                      eventName: "FluidDataStoreContextDisposeError",
+
+packages\runtime\container-runtime\src\dataStores.ts:
+  323              } catch (error) {
+  324:                 this.logger.sendErrorEvent({
+  325                      eventName: "SetConnectionStateError",
+
+packages\runtime\container-runtime\src\summarizer.ts:
+  336                  // before this instance has kicked off a new summarize run.
+  337:                 this.logger.sendErrorEvent({
+  338                      eventName: "SummaryAckWaitTimeout",
+
+  480          }).catch((error) => {
+  481:             this.logger.sendErrorEvent({ eventName: "UnexpectedSummarizeError" }, error);
+  482          });
+
+  796          this.handleSummaryAcks().catch((error) => {
+  797:             this.logger.sendErrorEvent({ eventName: "HandleSummaryAckFatalError" }, error);
+  798  
+
+  871              } catch (error) {
+  872:                 summaryLogger.sendErrorEvent({ eventName: "HandleSummaryAckError", refSequenceNumber }, error);
+  873              }
+
+packages\runtime\container-runtime\src\summaryCollection.ts:
+  364                  // the summarySequenceNumber is incorrect.
+  365:                 this.logger.sendErrorEvent({
+  366                      eventName: "SummaryAckWithoutOp",
+
+packages\runtime\container-runtime\src\summaryManager.ts:
+  120                  // Limit telemetry to only next client?
+  121:                 this.logger.sendErrorEvent({
+  122                      eventName: "ElectedClientNotSummarizing",
+
+  291          }, (error) => {
+  292:             this.logger.sendErrorEvent({
+  293                  eventName: "CreateSummarizerError",
+
+  339              // Should not be possible to hit this case
+  340:             this.logger.sendErrorEvent({ eventName: "StopCalledWithoutRunningSummarizer", reason });
+  341              this.state = SummaryManagerState.Off;
+
+packages\runtime\datastore\src\dataStoreRuntime.ts:
+  341                  } catch (error) {
+  342:                     this.logger.sendErrorEvent({ eventName: "GetChannelFailedInRequest" }, error);
+  343  
+
+packages\runtime\runtime-utils\src\summarizerNode\summarizerNode.ts:
+  142              }
+  143:             this.wipSummaryLogger.sendErrorEvent({
+  144                  eventName: "SummarizingWithBasePlusOps",
+
+packages\test\test-service-load\src\runner.ts:
+   65          try{
+   66:             l.sendErrorEvent({eventName: "UnhandledPromiseRejection"}, reason);
+   67          } catch(e) {
+
+  172              } catch (error) {
+  173:                 logger.sendErrorEvent({eventName: "RunnerFailed"}, error);
+  174              } finally {
+
+  277      }).catch(async (e)=>{
+  278:         await loggerP.then(async (l)=>l.sendErrorEvent({eventName: "ScheduleLeaveFailed", runId: runConfig.runId}, e));
+  279      });
+
+packages\tools\replay-tool\src\replayMessages.ts:
+  447                  } catch (error) {
+  448:                     doc.logger.sendErrorEvent({ eventName: "FailedToLoadSnapshot" }, error);
+  449                  }
+
+packages\utils\telemetry-utils\src\events.ts:
+  21      } catch (error) {
+  22:         logger.sendErrorEvent({ eventName: "RaiseEventError", event }, error);
+  23      }
+
+  37      } catch (error) {
+  38:         logger.sendErrorEvent({ eventName: "RaiseConnectedEventError" }, error);
+  39      }
+
+packages\utils\telemetry-utils\src\logger.ts:
+  170       */
+  171:     public sendErrorEvent(event: ITelemetryErrorEvent, error?: any) {
+  172          this.sendTelemetryEvent({ ...event, category: "error" }, error);
+
+  588      }
+  589:     public sendErrorEvent(event: ITelemetryErrorEvent, error?: any) {
+  590          this.reportError("errorEvent in UT logger!", event, error);

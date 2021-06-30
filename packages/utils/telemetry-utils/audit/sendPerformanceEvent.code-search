@@ -1,0 +1,99 @@
+# Query: sendPerformanceEvent
+# Flags: CaseSensitive WordMatch
+# Including: *.ts
+# Excluding: *.spec.ts
+# ContextLines: 1
+
+20 results - 12 files
+
+common\lib\common-definitions\src\logger.ts:
+  115       */
+  116:     sendPerformanceEvent(event: ITelemetryPerformanceEvent, error?: any): void;
+  117  }
+
+common\lib\common-utils\src\logger.ts:
+  40      }
+  41:     public sendPerformanceEvent(event: ITelemetryPerformanceEvent, error?: any): void {
+  42      }
+
+packages\dds\merge-tree\src\client.ts:
+  919          } finally {
+  920:             this.logger.sendPerformanceEvent({
+  921                  eventName: "MergeTree:RegeneratePendingOp",
+
+packages\drivers\odsp-driver\src\odspDeltaStorageService.ts:
+   70  
+   71:             this.logger.sendPerformanceEvent({
+   72                  eventName: "OpsFetch",
+
+  176              if (result.done) {
+  177:                 this.logger.sendPerformanceEvent({
+  178                      eventName: "CacheOpsRetrieved",
+
+packages\drivers\odsp-driver\src\odspDocumentService.ts:
+  314          if (duration >= 2000) {
+  315:             this.logger.sendPerformanceEvent({
+  316                  eventName: "ConnectionSuccess",
+
+packages\drivers\odsp-driver\src\opsCaching.ts:
+  111              if (this.totalOpsToCache === 0) {
+  112:                 this.logger.sendPerformanceEvent({ eventName: "CacheOpsLimitHit"});
+  113                  this.cache.remove();
+
+  152          if (messages.length > 0) {
+  153:             this.logger.sendPerformanceEvent({
+  154                  eventName: "CacheOpsUsed",
+
+packages\loader\container-loader\src\container.ts:
+  1656  
+  1657:         this.logger.sendPerformanceEvent({
+  1658              eventName: `ConnectionStateChange_${ConnectionState[value]}`,
+
+packages\loader\container-loader\src\deltaManager.ts:
+   834                  if (op.sequenceNumber >= to) {
+   835:                     this.logger.sendPerformanceEvent({
+   836                          reason: this.fetchReason,
+
+  1282              if (eventName !== undefined) {
+  1283:                 this.logger.sendPerformanceEvent({
+  1284                      eventName,
+
+packages\loader\driver-utils\src\parallelRequests.ts:
+  257                      // This layer will just keep trying until it gets full set.
+  258:                     this.logger.sendPerformanceEvent({
+  259                          eventName: "ParallelRequests_Partial",
+
+packages\runtime\container-runtime\src\connectionTelemetry.ts:
+   71              if (typeof count === "number" && count >= 100) {
+   72:                 this.logger.sendPerformanceEvent({
+   73                      eventName: "GetDeltas_OpProcessing",
+
+   82          this.connectionOpSeqNumber = undefined;
+   83:         this.logger.sendPerformanceEvent({
+   84              eventName: "ConnectionSpeed",
+
+  123              if (this.opSendTimeForLatencyStatisticsForMsnStatistics !== undefined) {
+  124:                 this.logger.sendPerformanceEvent({
+  125                      eventName: "MsnStatistics",
+
+  137                  0x120 /* "Undefined latency statistics (op send time)" */);
+  138:             this.logger.sendPerformanceEvent({
+  139                  eventName: "OpRoundtripTime",
+
+packages\runtime\container-runtime\src\summarizer.ts:
+  610      private summarizeTimerHandler(time: number, count: number) {
+  611:         this.logger.sendPerformanceEvent({
+  612              eventName: "SummarizeTimeout",
+
+packages\utils\telemetry-utils\src\logger.ts:
+  180       */
+  181:     public sendPerformanceEvent(event: ITelemetryPerformanceEvent, error?: any): void {
+  182          const perfEvent: ITelemetryBaseEvent = {
+
+  476  
+  477:         this.logger.sendPerformanceEvent(event, error);
+  478      }
+
+  591      }
+  592:     public sendPerformanceEvent(event: ITelemetryPerformanceEvent, error?: any): void {
+  593      }

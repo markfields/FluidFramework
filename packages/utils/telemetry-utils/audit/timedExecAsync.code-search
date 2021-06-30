@@ -1,0 +1,162 @@
+# Query: timedExecAsync
+# Flags: CaseSensitive WordMatch
+# Including: *.ts
+# Excluding: *.spec.ts
+# ContextLines: 1
+
+34 results - 19 files
+
+packages\drivers\odsp-driver\src\createFile.ts:
+  68  
+  69:         return PerformanceEvent.timedExecAsync(
+  70              logger,
+
+packages\drivers\odsp-driver\src\epochTracker.ts:
+  362          // to unblock the process.
+  363:         await PerformanceEvent.timedExecAsync(
+  364              this.logger,
+
+packages\drivers\odsp-driver\src\fetchSnapshot.ts:
+   58      const { url, headers } = getUrlAndHeadersWithAuth(`${snapshotUrl}${path}${queryString}`, token);
+   59:     return PerformanceEvent.timedExecAsync(
+   60          logger,
+
+  122  ) {
+  123:     return PerformanceEvent.timedExecAsync(
+  124          logger,
+
+  198          // This event measures only successful cases of getLatest call (no tokens, no retries).
+  199:         return PerformanceEvent.timedExecAsync(
+  200              logger,
+
+packages\drivers\odsp-driver\src\getFileLink.ts:
+   90      // ODSP link requires extra call to return link that is resistant to file being renamed or moved to different folder
+   91:     return PerformanceEvent.timedExecAsync(
+   92          logger,
+
+  138  ): Promise<FileItemLite | undefined> {
+  139:     return PerformanceEvent.timedExecAsync(
+  140          logger,
+
+packages\drivers\odsp-driver\src\odspDocumentServiceFactoryCore.ts:
+  78  
+  79:         return PerformanceEvent.timedExecAsync(
+  80              odspLogger,
+
+packages\drivers\odsp-driver\src\odspDocumentStorageManager.ts:
+  286  
+  287:             return PerformanceEvent.timedExecAsync(
+  288                  this.logger,
+
+  328  
+  329:                 return PerformanceEvent.timedExecAsync(
+  330                      this.logger,
+
+  476              const hostSnapshotOptions = this.hostPolicy.snapshotOptions;
+  477:             const odspSnapshotCacheValue: ISnapshotCacheValue = await PerformanceEvent.timedExecAsync(
+  478                  this.logger,
+
+  544              // Fetch the latest snapshot versions for the document
+  545:             const response = await PerformanceEvent.timedExecAsync(
+  546                  this.logger,
+
+  653  
+  654:         const id = await PerformanceEvent.timedExecAsync(this.logger,
+  655              { eventName: "uploadSummaryWithContext" },
+
+packages\drivers\odsp-driver\src\odspDriverUrlResolverForShareLink.ts:
+  154          return async (options: OdspResourceTokenFetchOptions) => {
+  155:             return PerformanceEvent.timedExecAsync(
+  156                  logger,
+
+packages\drivers\odsp-driver\src\odspSummaryUploadManager.ts:
+  104  
+  105:             return PerformanceEvent.timedExecAsync(this.logger,
+  106                  {
+
+packages\drivers\odsp-driver\src\odspUtils.ts:
+  253          // (fluid-fetcher)
+  254:         return PerformanceEvent.timedExecAsync(
+  255              logger,
+
+packages\drivers\odsp-driver\src\prefetchLatestSnapshot.ts:
+  69      const removeEntries = async () => persistedCache.removeEntries(snapshotKey.file);
+  70:     return PerformanceEvent.timedExecAsync(
+  71          odspLogger,
+
+packages\drivers\odsp-driver\src\vroom.ts:
+  49              : {};
+  50:         return PerformanceEvent.timedExecAsync(
+  51              logger, {
+
+packages\drivers\routerlicious-driver\src\deltaStorageService.ts:
+  94              tenantId, id, this.tokenProvider, this.logger);
+  95:         const ops = await PerformanceEvent.timedExecAsync(
+  96              this.logger,
+
+packages\drivers\routerlicious-driver\src\documentStorageService.ts:
+   65  
+   66:         const rawTree = await PerformanceEvent.timedExecAsync(
+   67              this.logger,
+
+   85          const id = versionId ? versionId : this.id;
+   86:         const commits = await PerformanceEvent.timedExecAsync(
+   87              this.logger,
+
+  103          const branch = ref ? `datastores/${this.id}/${ref}` : this.id;
+  104:         const commit = await PerformanceEvent.timedExecAsync(
+  105              this.logger,
+
+  115      public async uploadSummaryWithContext(summary: ISummaryTree, context: ISummaryContext): Promise<string> {
+  116:         const summaryHandle = await PerformanceEvent.timedExecAsync(
+  117              this.logger,
+
+  131          const uint8ArrayFile = new Uint8Array(file);
+  132:         return PerformanceEvent.timedExecAsync(
+  133              this.logger,
+
+  151      public async readBlob(blobId: string): Promise<ArrayBufferLike> {
+  152:         const value = await PerformanceEvent.timedExecAsync(
+  153              this.logger,
+
+packages\loader\container-loader\src\container.ts:
+  319  
+  320:         return PerformanceEvent.timedExecAsync(
+  321              container.logger,
+
+  876      public async request(path: IRequest): Promise<IResponse> {
+  877:         return PerformanceEvent.timedExecAsync(this.logger, { eventName: "Request" }, async () => {
+  878              return this.context.request(path);
+
+packages\loader\container-loader\src\containerContext.ts:
+  302      private async loadCodeModule(codeDetails: IFluidCodeDetails) {
+  303:         const loadCodeResult = await PerformanceEvent.timedExecAsync(
+  304              this.logger,
+
+packages\loader\container-loader\src\loader.ts:
+  328          const eventName = pendingLocalState === undefined ? "Resolve" : "ResolveWithPendingState";
+  329:         return PerformanceEvent.timedExecAsync(this.logger, { eventName }, async () => {
+  330              const resolved = await this.resolveCore(
+
+  338      public async request(request: IRequest): Promise<IResponse> {
+  339:         return PerformanceEvent.timedExecAsync(this.logger, { eventName: "Request" }, async () => {
+  340              const resolved = await this.resolveCore(request);
+
+packages\runtime\container-runtime\src\containerRuntime.ts:
+  1560      public async collectGarbage(logger: ITelemetryLogger) {
+  1561:         await PerformanceEvent.timedExecAsync(logger, { eventName: "GarbageCollection" }, async (event) => {
+  1562              const gcStats: { totalGCNodes?: number; deletedGCNodes?: number } = {};
+
+  1649                  // We need to catch up to the latest summary's reference sequence number before pausing.
+  1650:                 await PerformanceEvent.timedExecAsync(
+  1651                      summaryLogger,
+
+packages\runtime\container-runtime\src\summaryManager.ts:
+  306  
+  307:         PerformanceEvent.timedExecAsync(
+  308              this.logger,
+
+packages\utils\telemetry-utils\src\logger.ts:
+  385  
+  386:     public static async timedExecAsync<T>(
+  387          logger: ITelemetryLogger,

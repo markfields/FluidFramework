@@ -1,0 +1,213 @@
+# Query: sendTelemetryEvent
+# Flags: CaseSensitive WordMatch
+# Including: *.ts
+# Excluding: *.spec.ts
+# ContextLines: 1
+
+46 results - 22 files
+
+common\lib\common-definitions\src\logger.ts:
+  103       */
+  104:     sendTelemetryEvent(event: ITelemetryGenericEvent, error?: any): void;
+  105  
+
+common\lib\common-utils\src\logger.ts:
+  36      }
+  37:     public sendTelemetryEvent(event: ITelemetryGenericEvent, error?: any) {
+  38      }
+
+packages\drivers\odsp-driver\src\epochTracker.ts:
+  58  
+  59:         this.logger.sendTelemetryEvent(
+  60              {
+
+packages\drivers\odsp-driver\src\odspSummaryUploadManager.ts:
+  63          if (context.proposalHandle !== this.lastSummaryProposalHandle) {
+  64:             this.logger.sendTelemetryEvent({
+  65                  eventName: "LastSummaryProposedHandleMismatch",
+
+packages\hosts\base-host\src\utils.ts:
+  115          if (seqNum === this.proposedSeqNum) {
+  116:             this.logger.sendTelemetryEvent({
+  117                  eventName: "UpgradeSucceeded",
+
+  127              // the proposal we're tracking was rejected, which probably means the upgrade failed
+  128:             this.logger.sendTelemetryEvent({ eventName: "UpgradeFailed", trackedSequenceNumber: this.proposedSeqNum });
+  129              this.emit("upgradeFailed", this.proposedSeqNum);
+
+  162  
+  163:         this.logger.sendTelemetryEvent({
+  164              eventName: "UpgradeDelayed",
+
+  188      private async propose(code: IFluidCodeDetails, reason: string): Promise<boolean> {
+  189:         this.logger.sendTelemetryEvent({
+  190              eventName: "UpgradeStarted",
+
+packages\loader\container-loader\src\connectionStateHandler.ts:
+   98              // Adding this event temporarily so that we can get help debugging if something goes wrong.
+   99:             this.logger.sendTelemetryEvent({
+  100                  eventName: "connectedStateRejected",
+
+  194                  // Adding this event temporarily so that we can get help debugging if something goes wrong.
+  195:                 this.logger.sendTelemetryEvent({
+  196                      eventName: "noWaitOnDisconnected",
+
+packages\loader\container-loader\src\container.ts:
+   760              assert(this.loaded, 0x0d0 /* "Container in non-loaded state before close!" */);
+   761:             this.logger.sendTelemetryEvent({ eventName: "ContainerClose" });
+   762          }
+
+   884          if (!this.protocolHandler.quorum.has("code") && !this.protocolHandler.quorum.has("code2")) {
+   885:             this.logger.sendTelemetryEvent({ eventName: "SkipSnapshot" });
+   886              return;
+
+   907  
+   908:         this.logger.sendTelemetryEvent({
+   909              eventName: reconnect ? "AutoReconnectEnabled" : "AutoReconnectDisabled",
+
+   927                  // adding this log point for easier diagnostics
+   928:                 this.logger.sendTelemetryEvent({ eventName: "setAutoReconnectError" }, error);
+   929              });
+
+  1699          if (logOpsOnReconnect) {
+  1700:             this.logger.sendTelemetryEvent(
+  1701                  { eventName: "OpsSentOnReconnect", count: this.messageCountAfterDisconnection });
+
+packages\loader\container-loader\src\deltaManager.ts:
+   394          if (readonly !== this._forceReadonly) {
+   395:             this.logger.sendTelemetryEvent({
+   396                  eventName: "ForceReadOnly",
+
+   672              if (connectRepeatCount > 1) {
+   673:                 this.logger.sendTelemetryEvent({
+   674                      attempts: connectRepeatCount,
+
+  1450          if (this.closed) {
+  1451:             this.logger.sendTelemetryEvent({ eventName: "fetchMissingDeltasClosedConnection" });
+  1452              return;
+
+packages\loader\driver-utils\src\networkUtils.ts:
+  30      newEvent.category = newEvent.online === OnlineStatus.Online ? "error" : "generic";
+  31:     logger.sendTelemetryEvent(newEvent, error);
+  32  }
+
+packages\loader\driver-utils\src\parallelRequests.ts:
+  218                          // This layer copes with this situation just fine.
+  219:                         this.logger.sendTelemetryEvent({
+  220                              eventName: "ParallelRequests_Over",
+
+packages\loader\driver-utils\src\runWithRetry.ts:
+  64      if (numRetries > 0) {
+  65:         logger.sendTelemetryEvent({
+  66              eventName: fetchCallName,
+
+packages\runtime\container-runtime\src\blobManager.ts:
+  127          }
+  128:         this.logger.sendTelemetryEvent({ eventName: "ExternalBlobsInSnapshot", count });
+  129      }
+
+packages\runtime\container-runtime\src\connectionTelemetry.ts:
+   99          if (this.pongCount === aggregateCount) {
+  100:             this.logger.sendTelemetryEvent({ eventName: "DeltaLatency", value: this.socketLatency / aggregateCount });
+  101              this.pongCount = 0;
+
+packages\runtime\container-runtime\src\containerRuntime.ts:
+  371  
+  372:                 this.logger.sendTelemetryEvent({
+  373                      eventName: "BatchEndNotReceived",
+
+  902                  this.summaryCollection.once(MessageType.SummaryAck, () => {
+  903:                     this.logger.sendTelemetryEvent({eventName: "SummaryStatus:CaughtUp"});
+  904                      // we've caught up, so re-register the default action to monitor for
+
+  973  
+  974:         this.logger.sendTelemetryEvent({
+  975              eventName: "ContainerRuntimeDisposed",
+
+packages\runtime\container-runtime\src\dataStores.ts:
+  308              assert(!local, 0x163 /* "Missing datastore for local signal" */);
+  309:             this.logger.sendTelemetryEvent({
+  310                  eventName: "SignalFluidDataStoreNotFound",
+
+packages\runtime\container-runtime\src\deltaScheduler.ts:
+  114  
+  115:             this.logger.sendTelemetryEvent({
+  116                  eventName: "InboundOpsProcessingTime",
+
+packages\runtime\container-runtime\src\summarizer.ts:
+  347              if (this.pendingAckTimer.hasTimer) {
+  348:                 this.logger.sendTelemetryEvent({
+  349                      eventName: "MissingSummaryAckFoundByOps",
+
+  522          this.heuristics.lastAttempted.summarySequenceNumber = summaryOp.sequenceNumber;
+  523:         this.logger.sendTelemetryEvent({
+  524              eventName: "SummaryOp",
+
+  535          }
+  536:         this.logger.sendTelemetryEvent({
+  537              eventName: ackNack.type === MessageType.SummaryAck ? "SummaryAck" : "SummaryNack",
+
+  697  
+  698:         this.logger.sendTelemetryEvent({
+  699              eventName: "StoppingSummarizer",
+
+  725          if (startResult.started === false) {
+  726:             this.logger.sendTelemetryEvent({
+  727                  eventName: "NotStarted",
+
+  734          if (this.runtime.deltaManager.active === false) {
+  735:             this.logger.sendTelemetryEvent({
+  736                  eventName: "NotStarted",
+
+  751              // so we bypass running altogether if this client isn't the oldest.
+  752:             this.logger.sendTelemetryEvent({
+  753                  eventName: "NotStarted",
+
+  762          // Initialize values and first ack (time is not exact)
+  763:         this.logger.sendTelemetryEvent({
+  764              eventName: "RunningSummarizer",
+
+packages\runtime\container-runtime\src\summaryManager.ts:
+  266              // If we should never summarize, lock in disabled state
+  267:             this.logger.sendTelemetryEvent({ eventName: "SummariesDisabled" });
+  268              this.state = SummaryManagerState.Disabled;
+
+  347          // now we play it safe and launch a second copy.
+  348:         this.logger.sendTelemetryEvent({
+  349              eventName: "CreatingSummarizer",
+
+packages\runtime\garbage-collector\src\garbageCollector.ts:
+  47               *
+  48:              * logger.sendTelemetryEvent({
+  49               *    eventName: "MissingGCNode",
+
+packages\runtime\runtime-utils\src\summarizerNode\summarizerNodeUtils.ts:
+  141      snapshot: ISnapshotTree,
+  142:     logger: Pick<ITelemetryLogger, "sendTelemetryEvent">,
+  143  ): IDecodedSummary {
+
+  149          if (i > maxDecodeDepth) {
+  150:             logger.sendTelemetryEvent({
+  151                  eventName: "DecodeSummaryMaxDepth",
+
+  168                              if (newEarliestSeq <= latestSeq) {
+  169:                                 logger.sendTelemetryEvent({
+  170                                      eventName:"DuplicateOutstandingOps",
+
+packages\tools\replay-tool\src\replayMessages.ts:
+  494                  } catch (error) {
+  495:                     doc.logger.sendTelemetryEvent({ eventName: "FailedToLoadSnapshot" }, error);
+  496                  }
+
+packages\utils\telemetry-utils\src\logger.ts:
+  153       */
+  154:     public sendTelemetryEvent(event: ITelemetryGenericEvent, error?: any) {
+  155          const newEvent: ITelemetryBaseEvent = {
+
+  171      public sendErrorEvent(event: ITelemetryErrorEvent, error?: any) {
+  172:         this.sendTelemetryEvent({ ...event, category: "error" }, error);
+  173      }
+
+  586      }
+  587:     public sendTelemetryEvent(event: ITelemetryGenericEvent, error?: any) {
+  588      }
