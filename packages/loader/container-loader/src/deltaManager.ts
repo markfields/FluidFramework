@@ -319,7 +319,9 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
             });
 
         this._inbound.on("error", (error) => {
-            this.close(CreateProcessingError(error, "deltaManagerInboundErrorHandler", this.lastMessage));
+            this.closeInternal(
+                "inboundError",
+                CreateProcessingError(error, "deltaManagerInboundErrorHandler", this.lastMessage));
         });
 
         // Inbound signal queue
@@ -334,7 +336,7 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
         });
 
         this._inboundSignal.on("error", (error) => {
-            this.close(normalizeError(error));
+            this.closeInternal("inboundSignalError", normalizeError(error));
         });
 
         // Initially, all queues are created paused.
@@ -560,6 +562,14 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
         }
     }
 
+    private closeInternal(
+        reason: string, // "connectError" | "inboundError" | "inboundSignalError" | "outboundError" | "opError",
+        error: IFluidErrorBase,
+    ) {
+        error.addTelemetryProperties({ dmCloseReason: reason });
+        this.close(error);
+    }
+
     /**
      * Closes the connection and clears inbound & outbound queues.
      */
@@ -760,7 +770,7 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
                                 message2,
                             },
                         );
-                        this.close(error);
+                        this.closeInternal("messageProcessingError", error);
                     }
                 }
             } else if (message.sequenceNumber !== this.lastQueuedSequenceNumber + 1) {
