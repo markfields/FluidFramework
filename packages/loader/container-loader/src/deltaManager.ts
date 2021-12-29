@@ -25,6 +25,7 @@ import {
     normalizeError,
     logIfFalse,
     safeRaiseEvent,
+    IFluidErrorBase,
 } from "@fluidframework/telemetry-utils";
 import {
     IDocumentDeltaStorageService,
@@ -289,13 +290,21 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
         createConnectionManager: (props: IConnectionManagerFactoryArgs) => TConnectionManager,
     ) {
         super();
+
+        const closeHandler = (connecting: boolean, error?: IFluidErrorBase) => {
+            if (connecting && error !== undefined) {
+                error.addTelemetryProperties({ fatalConnectError: true });
+            }
+            this.close(error);
+        };
+
         const props: IConnectionManagerFactoryArgs = {
             incomingOpHandler:(messages: ISequencedDocumentMessage[], reason: string) =>
                 this.enqueueMessages(messages, reason),
             signalHandler: (message: ISignalMessage) => this._inboundSignal.push(message),
             reconnectionDelayHandler: (delayMs: number, error: unknown) =>
                 this.emitDelayInfo(this.deltaStreamDelayId, delayMs, error),
-            closeHandler: (error: any) => this.close(error),
+            closeHandler,
             disconnectHandler: (reason: string) => this.disconnectHandler(reason),
             connectHandler: (connection: IConnectionDetails) => this.connectHandler(connection),
             pongHandler: (latency: number) => this.emit("pong", latency),

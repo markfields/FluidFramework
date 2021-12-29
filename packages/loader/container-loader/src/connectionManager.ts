@@ -65,8 +65,6 @@ const MaxReconnectDelayInMs = 8000;
 const InitialReconnectDelayInMs = 1000;
 const DefaultChunkSize = 16 * 1024;
 
-const fatalConnectErrorProp = { fatalConnectError: true };
-
 function getNackReconnectInfo(nackContent: INackContent) {
     const message = `Nack (${nackContent.type}): ${nackContent.message}`;
     const canRetry = nackContent.code !== 403;
@@ -310,7 +308,7 @@ export class ConnectionManager implements IConnectionManager {
             });
 
         this._outbound.on("error", (error) => {
-            this.props.closeHandler(normalizeError(error));
+            this.props.closeHandler(false /* connecting */, normalizeError(error));
         });
     }
 
@@ -419,8 +417,7 @@ export class ConnectionManager implements IConnectionManager {
 
     public connect(connectionMode?: ConnectionMode) {
         this.connectCore(connectionMode).catch((error) => {
-            const normalizedError = normalizeError(error, { props: fatalConnectErrorProp });
-            this.props.closeHandler(normalizedError);
+            this.props.closeHandler(true /* connecting */, normalizeError(error));
         });
     }
 
@@ -490,9 +487,9 @@ export class ConnectionManager implements IConnectionManager {
 
                 // Socket.io error when we connect to wrong socket, or hit some multiplexing bug
                 if (!canRetryOnError(origError)) {
-                    const error = normalizeError(origError, { props: fatalConnectErrorProp });
-                    this.props.closeHandler(error);
-                    throw error;
+                    const error = normalizeError(origError);
+                    this.props.closeHandler(true /* connecting */, error); // Currently redundant with fn's only caller
+                    throw error;  //* Doesn't have the fatal prop...
                 }
 
                 // Log error once - we get too many errors in logs when we are offline,
@@ -726,12 +723,12 @@ export class ConnectionManager implements IConnectionManager {
 
         // If reconnection is not an option, close the DeltaManager
         if (!canRetry) {
-            this.props.closeHandler(normalizeError(error, { props: fatalConnectErrorProp }));
+            this.props.closeHandler(true /* connecting */, normalizeError(error));
         } else if (this.reconnectMode === ReconnectMode.Never) {
             // Do not raise container error if we are closing just because we lost connection.
             // Those errors (like IdleDisconnect) would show up in telemetry dashboards and
             // are very misleading, as first initial reaction - some logic is broken.
-            this.props.closeHandler();
+            this.props.closeHandler(true /* connecting */);
         }
 
         // If closed then we can't reconnect
@@ -757,7 +754,7 @@ export class ConnectionManager implements IConnectionManager {
                 readonlyPermissions: this.readOnlyInfo.permissions,
                 storageOnly: this.readOnlyInfo.storageOnly,
             });
-            this.props.closeHandler(error);
+            this.props.closeHandler(false /* connecting */, error);
             return undefined;
         }
 
@@ -859,7 +856,7 @@ export class ConnectionManager implements IConnectionManager {
         // TODO: we should remove this check when service updates?
         // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
         if (this._readonlyPermissions) {
-            this.props.closeHandler(createWriteError("writeOnReadOnlyDocument"));
+            this.props.closeHandler(false /* connecting */, createWriteError("writeOnReadOnlyDocument"));
         }
 
         // check message.content for Back-compat with old service.

@@ -19,6 +19,7 @@ import {
     IClientDetails,
     ISignalMessage,
 } from "@fluidframework/protocol-definitions";
+import { IFluidErrorBase } from "@fluidframework/telemetry-utils";
 
 export enum ReconnectMode {
     Never = "Never",
@@ -128,7 +129,7 @@ export interface IConnectionManagerFactoryArgs {
      * Called by connection manager whwnever critical error happens and container should be closed.
      * Expects dispose() call in respose to this call.
      */
-    readonly closeHandler: (error?: any) => void,
+    readonly closeHandler: (connecting: boolean, error?: IFluidErrorBase) => void,
 
     /**
      * Called whenever connection to relay service is lost.
