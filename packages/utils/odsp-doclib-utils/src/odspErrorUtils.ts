@@ -76,19 +76,21 @@ function isOdspErrorResponse(x: any): x is OdspErrorResponse {
         (error?.code === undefined || typeof(error?.code) === "string");
 }
 
-export function tryParseErrorResponse(
-    response: string | undefined,
-): { success: true, errorResponse: OdspErrorResponse } | { success: false } {
+/**
+ * Check the response to see if it matches the expected format for ODSP error responses,
+ * and if so return it as an object.  Otherwise return undefined.
+ * */
+export function tryParseErrorResponse(response: string | undefined): OdspErrorResponse | undefined {
     try {
         if (response !== undefined) {
             const parsed = JSON.parse(response);
             if (isOdspErrorResponse(parsed)) {
-                return { success: true, errorResponse: parsed };
+                return parsed;
             }
         }
     }
     catch(e) {}
-    return { success: false };
+    return undefined;
 }
 
 export function parseFacetCodes(errorResponse: OdspErrorResponse): string[] {
@@ -114,13 +116,12 @@ export function createOdspNetworkError(
     props: ITelemetryProperties = {},
 ): IFluidErrorBase & OdspError & IFacetCodes {
     let error: IFluidErrorBase & OdspError & IFacetCodes;
-    const parseResult = tryParseErrorResponse(responseText);
+    const errorResponse = tryParseErrorResponse(responseText);
     let facetCodes: string[] | undefined;
     let innerMostErrorCode: string | undefined;
-    if (parseResult.success) {
+    if (errorResponse !== undefined) {
         // Log the whole response if it looks like the error format we expect
         props.response = responseText;
-        const errorResponse = parseResult.errorResponse;
         facetCodes = parseFacetCodes(errorResponse);
         if (facetCodes !== undefined) {
             innerMostErrorCode = facetCodes[0];

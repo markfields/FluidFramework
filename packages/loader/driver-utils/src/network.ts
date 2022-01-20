@@ -112,7 +112,6 @@ export class RetryableError<T extends string> extends NetworkErrorBasic<T> {
     }
 }
 
-//* Check
 /**
  * Throttling error class - used to communicate all throttling errors
  */
