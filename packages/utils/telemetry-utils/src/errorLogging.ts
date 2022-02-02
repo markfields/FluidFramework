@@ -173,67 +173,6 @@ export function generateStack(): string | undefined {
     return generateErrorWithStack().stack;
 }
 
-/**
- * Create a new error, wrapping and caused by the given unknown error.
- * Copies the inner error's message and stack over but otherwise uses newErrorFn to define the error.
- * The inner error's instance id will also be logged for telemetry analysis.
- * @param innerError - An error from untrusted/unknown origins
- * @param newErrorFn - callback that will create a new error given the original error's message
- * @returns A new error object "wrapping" the given error
- */
-export function wrapError<T extends LoggingError>(
-    innerError: unknown,
-    newError: T,
-): T {
-    // Put the innerError on newError for access while debugging (but don't log it)
-    newError.addUnsafeProperties({ innerError });
-
-    const {
-        message: innerMessage,
-        stack: innerStack,
-    } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
-
-    // Add innerError's message for logging
-    if (isValidLegacyError(innerError)) {
-        newError.addTelemetryProperties({ innerErrorMessage: innerError.message });
-    } else {
-        // We have to assume the message may contain user data
-        newError.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage } });
-    }
-
-    // Use the same errorInstanceId for this and innerError if possible
-    if (hasErrorInstanceId(innerError)) {
-        newError.overrideErrorInstanceId(innerError.errorInstanceId);
-    } else {
-        try {
-            Object.assign(innerError, { errorInstanceId: newError.errorInstanceId });
-        }
-        catch (_) {}
-    }
-
-    if (innerStack !== undefined) {
-        overwriteStack(newError, innerStack);
-    }
-
-    return newError;
-}
-
-/** The same as wrapError, but also logs the innerError, including the wrapping error's instance id */
-export function wrapErrorAndLog<T extends LoggingError>(
-    innerError: unknown,
-    newError: T,
-    logger: ITelemetryLogger,
-) {
-    wrapError(innerError, newError);
-
-    logger.sendTelemetryEvent({
-        eventName: "WrapError",
-        errorInstanceId: newError.errorInstanceId,
-    }, innerError);
-
-    return newError;
-}
-
 function overwriteStack(error: LoggingError, stack: string) {
     // supposedly setting stack on an Error can throw.
     try {
@@ -354,12 +293,61 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
         };
     }
 
-    public addUnsafeProperties(props: { [key:string]: unknown }) {
+    /**
+     * Annotate this error as caused by the given unknown error, aka "wrap" it.
+     * @param innerError - An error from untrusted/unknown origins
+     */
+    public wrapError(innerError: unknown) {
+        // Put the innerError on here for access while debugging (but don't log it)
+        this.addUnsafeProperties({ innerError });
+
+        const {
+            message: innerMessage,
+            stack: innerStack,
+        } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
+
+        // Add innerError's message for logging
+        if (isValidLegacyError(innerError)) {
+            this.addTelemetryProperties({ innerErrorMessage: innerError.message });
+        } else {
+            // We have to assume the message may contain user data
+            this.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage } });
+        }
+
+        // Use the same errorInstanceId for this and innerError if possible
+        if (hasErrorInstanceId(innerError)) {
+            this.overrideErrorInstanceId(innerError.errorInstanceId);
+        } else {
+            try {
+                Object.assign(innerError, { errorInstanceId: this.errorInstanceId });
+            }
+            catch (_) {}
+        }
+
+        if (innerStack !== undefined) {
+            overwriteStack(this, innerStack);
+        }
+    }
+
+    /** The same as wrapError, but also logs the innerError, including the errorInstanceId */
+    public wrapErrorAndLog(
+        innerError: unknown,
+        logger: ITelemetryLogger,
+    ) {
+        this.wrapError(innerError);
+
+        logger.sendTelemetryEvent({
+            eventName: "WrapError",
+            errorInstanceId: this.errorInstanceId,
+        }, innerError);
+    }
+
+    private addUnsafeProperties(props: { [key:string]: unknown }) {
         const keysAdded = copyProps(this, props);
         keysAdded.forEach((key: string) => this.omitPropsFromLogging.add(key));
     }
 
-    public overrideErrorInstanceId(errorInstanceId: string) {
+    private overrideErrorInstanceId(errorInstanceId: string) {
         this._errorInstanceId = errorInstanceId;
     }
 }
