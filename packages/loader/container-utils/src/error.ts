@@ -69,7 +69,6 @@ export class ThrottlingWarning extends LoggingError implements IThrottlingWarnin
     ): IThrottlingWarning {
         const newErrorFn =
             (errMsg: string) => new ThrottlingWarning(errMsg, errorCode, retryAfterSeconds);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return wrapErrorAndLog(error, newErrorFn, logger);
     }
 }

@@ -16,6 +16,7 @@ import {
     isFluidError,
     isValidLegacyError,
 } from "./fluidErrorBase";
+import { TelemetryDataTag } from "./logger";
 
 /** @returns true if value is an object but neither null nor an array */
 const isRegularObject = (value: any): boolean => {
@@ -163,56 +164,7 @@ export function generateStack(): string | undefined {
     return generateErrorWithStack().stack;
 }
 
-/**
- * Create a new error, wrapping and caused by the given unknown error.
- * Copies the inner error's message and stack over but otherwise uses newErrorFn to define the error.
- * The inner error's instance id will also be logged for telemetry analysis.
- * @param innerError - An error from untrusted/unknown origins
- * @param newErrorFn - callback that will create a new error given the original error's message
- * @returns A new error object "wrapping" the given error
- */
- export function wrapError<T extends IFluidErrorBase>(
-    innerError: unknown,
-    newErrorFn: (message: string) => T,
-): T {
-    const {
-        message,
-        stack,
-    } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
-
-    const newError = newErrorFn(message);
-
-    if (stack !== undefined) {
-        overwriteStack(newError, stack);
-    }
-
-    if (hasErrorInstanceId(innerError)) {
-        newError.addTelemetryProperties({ innerErrorInstanceId: innerError.errorInstanceId });
-    }
-
-    return newError;
-}
-
-/** The same as wrapError, but also logs the innerError, including the wrapping error's instance id */
-export function wrapErrorAndLog<T extends IFluidErrorBase>(
-    innerError: unknown,
-    newErrorFn: (message: string) => T,
-    logger: ITelemetryLogger,
-) {
-    const newError = wrapError(innerError, newErrorFn);
-    const wrappedByErrorInstanceId = hasErrorInstanceId(newError)
-        ? newError.errorInstanceId
-        : undefined;
-
-    logger.sendTelemetryEvent({
-        eventName: "WrapError",
-        wrappedByErrorInstanceId,
-    }, innerError);
-
-    return newError;
-}
-
-function overwriteStack(error: IFluidErrorBase, stack: string) {
+function overwriteStack(error: LoggingError, stack: string) {
     // supposedly setting stack on an Error can throw.
     try {
         Object.assign(error, { stack });
@@ -287,7 +239,9 @@ export const getCircularReplacer = () => {
  * PLEASE take care to avoid setting sensitive data on this object without proper tagging!
  */
 export class LoggingError extends Error implements ILoggingError, Pick<IFluidErrorBase, "errorInstanceId"> {
-    readonly errorInstanceId = uuid();
+    protected _errorInstanceId = uuid();
+
+    get errorInstanceId() { return this._errorInstanceId; }
 
     /**
      * Create a new LoggingError
@@ -349,5 +303,45 @@ class SimpleFluidError extends LoggingError implements IFluidErrorBase {
         if (errorProps.stack !== undefined) {
             overwriteStack(this, errorProps.stack);
         }
+    }
+}
+
+export class WrappingError extends LoggingError {
+    constructor(
+        message: string,
+        public readonly innerError: unknown,
+        logger?: ITelemetryLogger,
+    ) {
+        super(message, undefined, new Set(["innerError"]));
+
+        const {
+            message: innerMessage,
+            stack,
+        } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
+
+        if (isValidLegacyError(innerError)) {
+            this.addTelemetryProperties({ innerErrorMessage: innerError.message });
+        } else {
+            this.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage } });
+        }
+
+        if (stack !== undefined) {
+            overwriteStack(this, stack);
+        }
+
+        // Use the same errorInstanceId for this and innerError if possible
+        if (hasErrorInstanceId(innerError)) {
+            this._errorInstanceId = innerError.errorInstanceId;
+        } else {
+            try {
+                Object.assign(innerError, { errorInstanceId: this.errorInstanceId });
+            }
+            catch (_) {}
+        }
+
+        logger?.sendTelemetryEvent({
+            eventName: "WrapError",
+            errorInstanceId: this._errorInstanceId,
+        }, innerError);
     }
 }
