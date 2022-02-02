@@ -64,13 +64,19 @@ export function extractLogSafeErrorProperties(error: any, sanitizeStack: boolean
 /** type guard for ILoggingError interface */
 export const isILoggingError = (x: any): x is ILoggingError => typeof x?.getTelemetryProperties === "function";
 
-/** Copy props from source onto target, but do not overwrite an existing prop that matches */
-function copyProps(target: ITelemetryProperties | LoggingError, source: ITelemetryProperties) {
+/**
+ * Copy props from source onto target, but do not overwrite an existing prop that matches
+ * @returns a list of keys added to the target object
+ */
+function copyProps(target: LoggingError, source: { [key:string]: unknown }) {
+    const keysAdded: string[] = [];
     for (const key of Object.keys(source)) {
         if (target[key] === undefined) {
             target[key] = source[key];
+            keysAdded.push(key);
         }
     }
+    return keysAdded;
 }
 
 /** Metadata to annotate an error object when annotating or normalizing it */
@@ -80,12 +86,15 @@ export interface IFluidErrorAnnotations {
 }
 
 /** For backwards compatibility with pre-fluidErrorCode valid errors */
-function patchWithErrorCode(
-    legacyError: Omit<IFluidErrorBase, "fluidErrorCode">,
+function patchLegacyError(
+    legacyError: Omit<IFluidErrorBase, "fluidErrorCode" | "errorInstanceId">,
 ): asserts legacyError is IFluidErrorBase {
-    const patchMe: { -readonly [P in "fluidErrorCode"]?: IFluidErrorBase[P] } = legacyError as any;
+    const patchMe: { -readonly [P in "fluidErrorCode" | "errorInstanceId"]?: IFluidErrorBase[P] } = legacyError as any;
     if (patchMe.fluidErrorCode === undefined) {
         patchMe.fluidErrorCode = "<error predates fluidErrorCode>";
+    }
+    if (patchMe.errorInstanceId === undefined) {
+        patchMe.errorInstanceId = uuid();
     }
 }
 
@@ -101,7 +110,7 @@ export function normalizeError(
 ): IFluidErrorBase {
     // Back-compat, while IFluidErrorBase is rolled out
     if (isValidLegacyError(error)) {
-        patchWithErrorCode(error);
+        patchLegacyError(error);
     }
 
     if (isFluidError(error)) {
@@ -162,6 +171,67 @@ let stackPopulatedOnCreation: boolean | undefined;
 
 export function generateStack(): string | undefined {
     return generateErrorWithStack().stack;
+}
+
+/**
+ * Create a new error, wrapping and caused by the given unknown error.
+ * Copies the inner error's message and stack over but otherwise uses newErrorFn to define the error.
+ * The inner error's instance id will also be logged for telemetry analysis.
+ * @param innerError - An error from untrusted/unknown origins
+ * @param newErrorFn - callback that will create a new error given the original error's message
+ * @returns A new error object "wrapping" the given error
+ */
+export function wrapError<T extends LoggingError>(
+    innerError: unknown,
+    newError: T,
+): T {
+    // Put the innerError on newError for access while debugging (but don't log it)
+    newError.addUnsafeProperties({ innerError });
+
+    const {
+        message: innerMessage,
+        stack: innerStack,
+    } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
+
+    // Add innerError's message for logging
+    if (isValidLegacyError(innerError)) {
+        newError.addTelemetryProperties({ innerErrorMessage: innerError.message });
+    } else {
+        // We have to assume the message may contain user data
+        newError.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage } });
+    }
+
+    // Use the same errorInstanceId for this and innerError if possible
+    if (hasErrorInstanceId(innerError)) {
+        newError.overrideErrorInstanceId(innerError.errorInstanceId);
+    } else {
+        try {
+            Object.assign(innerError, { errorInstanceId: newError.errorInstanceId });
+        }
+        catch (_) {}
+    }
+
+    if (innerStack !== undefined) {
+        overwriteStack(newError, innerStack);
+    }
+
+    return newError;
+}
+
+/** The same as wrapError, but also logs the innerError, including the wrapping error's instance id */
+export function wrapErrorAndLog<T extends LoggingError>(
+    innerError: unknown,
+    newError: T,
+    logger: ITelemetryLogger,
+) {
+    wrapError(innerError, newError);
+
+    logger.sendTelemetryEvent({
+        eventName: "WrapError",
+        errorInstanceId: newError.errorInstanceId,
+    }, innerError);
+
+    return newError;
 }
 
 function overwriteStack(error: LoggingError, stack: string) {
@@ -239,7 +309,7 @@ export const getCircularReplacer = () => {
  * PLEASE take care to avoid setting sensitive data on this object without proper tagging!
  */
 export class LoggingError extends Error implements ILoggingError, Pick<IFluidErrorBase, "errorInstanceId"> {
-    protected _errorInstanceId = uuid();
+    private _errorInstanceId = uuid();
 
     get errorInstanceId() { return this._errorInstanceId; }
 
@@ -283,6 +353,15 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
             message: this.message,
         };
     }
+
+    public addUnsafeProperties(props: { [key:string]: unknown }) {
+        const keysAdded = copyProps(this, props);
+        keysAdded.forEach((key: string) => this.omitPropsFromLogging.add(key));
+    }
+
+    public overrideErrorInstanceId(errorInstanceId: string) {
+        this._errorInstanceId = errorInstanceId;
+    }
 }
 
 /** Simple implementation of IFluidErrorBase, extending LoggingError */
@@ -303,45 +382,5 @@ class SimpleFluidError extends LoggingError implements IFluidErrorBase {
         if (errorProps.stack !== undefined) {
             overwriteStack(this, errorProps.stack);
         }
-    }
-}
-
-export class WrappingError extends LoggingError {
-    constructor(
-        message: string,
-        public readonly innerError: unknown,
-        logger?: ITelemetryLogger,
-    ) {
-        super(message, undefined, new Set(["innerError"]));
-
-        const {
-            message: innerMessage,
-            stack,
-        } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
-
-        if (isValidLegacyError(innerError)) {
-            this.addTelemetryProperties({ innerErrorMessage: innerError.message });
-        } else {
-            this.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage } });
-        }
-
-        if (stack !== undefined) {
-            overwriteStack(this, stack);
-        }
-
-        // Use the same errorInstanceId for this and innerError if possible
-        if (hasErrorInstanceId(innerError)) {
-            this._errorInstanceId = innerError.errorInstanceId;
-        } else {
-            try {
-                Object.assign(innerError, { errorInstanceId: this.errorInstanceId });
-            }
-            catch (_) {}
-        }
-
-        logger?.sendTelemetryEvent({
-            eventName: "WrapError",
-            errorInstanceId: this._errorInstanceId,
-        }, innerError);
     }
 }
