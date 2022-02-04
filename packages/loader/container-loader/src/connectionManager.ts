@@ -79,11 +79,7 @@ function getNackReconnectInfo(nackContent: INackContent) {
 }
 
 const createReconnectError = (fluidErrorCode: string, err: any) =>
-    wrapError(
-        err,
-        (errorMessage: string) =>
-            new GenericNetworkError(fluidErrorCode, errorMessage, true /* canRetry */,  { driverVersion: undefined }),
-    );
+    new GenericNetworkError(fluidErrorCode, fluidErrorCode, true /* canRetry */,  { driverVersion: undefined }, err);
 
 /**
  * Implementation of IDocumentDeltaConnection that does not support submitting

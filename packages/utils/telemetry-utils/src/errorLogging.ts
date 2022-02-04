@@ -261,7 +261,8 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
     constructor(
         message: string,
         props?: ITelemetryProperties,
-        private readonly omitPropsFromLogging: Set<string> = new Set(),
+        private readonly omitPropsFromLogging: Set<string> = new Set(["innerError"]),
+        public readonly innerError?: unknown,
     ) {
         super(message);
 
@@ -271,6 +272,8 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
         if (props) {
             this.addTelemetryProperties(props);
         }
+
+        this.incorporateInnerError();
     }
 
     /**
@@ -297,18 +300,19 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
      * Annotate this error as caused by the given unknown error, aka "wrap" it.
      * @param innerError - An error from untrusted/unknown origins
      */
-    public wrapError(innerError: unknown) {
-        // Put the innerError on here for access while debugging (but don't log it)
-        this.addUnsafeProperties({ innerError });
+    private incorporateInnerError() {
+        if (this.innerError === undefined) {
+            return;
+        }
 
         const {
             message: innerMessage,
             stack: innerStack,
-        } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
+        } = extractLogSafeErrorProperties(this.innerError, false /* sanitizeStack */);
 
         // Add innerError's message for logging
-        if (isValidLegacyError(innerError)) {
-            this.addTelemetryProperties({ innerErrorMessage: innerError.message });
+        if (isValidLegacyError(this.innerError)) {
+            this.addTelemetryProperties({ innerErrorMessage: this.innerError.message });
         } else {
             // We have to assume the message may contain user data
             this.addTelemetryProperties({
@@ -318,11 +322,11 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
         }
 
         // Use the same errorInstanceId for this and innerError if possible
-        if (hasErrorInstanceId(innerError)) {
-            this.overrideErrorInstanceId(innerError.errorInstanceId);
+        if (hasErrorInstanceId(this.innerError)) {
+            this.overrideErrorInstanceId(this.innerError.errorInstanceId);
         } else {
             try {
-                Object.assign(innerError, { errorInstanceId: this.errorInstanceId });
+                Object.assign(this.innerError, { errorInstanceId: this.errorInstanceId });
             }
             catch (_) {}
         }
@@ -332,22 +336,13 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
         }
     }
 
-    /** The same as wrapError, but also logs the innerError, including the errorInstanceId */
-    public wrapErrorAndLog(
-        innerError: unknown,
+    public logInnerError(
         logger: ITelemetryLogger,
     ) {
-        this.wrapError(innerError);
-
         logger.sendTelemetryEvent({
             eventName: "WrapError",
             errorInstanceId: this.errorInstanceId,
-        }, innerError);
-    }
-
-    private addUnsafeProperties(props: { [key:string]: unknown }) {
-        const keysAdded = copyProps(this, props);
-        keysAdded.forEach((key: string) => this.omitPropsFromLogging.add(key));
+        }, this.innerError);
     }
 
     private overrideErrorInstanceId(errorInstanceId: string) {

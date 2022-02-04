@@ -14,10 +14,9 @@ import {
     isValidLegacyError,
     IFluidErrorBase,
     normalizeError,
-    wrapError,
-    wrapErrorAndLog,
+    extractLogSafeErrorProperties,
 } from "@fluidframework/telemetry-utils";
-import { ITelemetryLogger, ITelemetryProperties } from "@fluidframework/common-definitions";
+import { ITelemetryProperties } from "@fluidframework/common-definitions";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
 
 /**
@@ -38,7 +37,7 @@ export class GenericError extends LoggingError implements IGenericError, IFluidE
         props?: ITelemetryProperties,
     ) {
         // Don't try to log the inner error
-        super(fluidErrorCode, props, new Set(["error"]));
+        super(fluidErrorCode, props, new Set(["error"]), error);
     }
 }
 
@@ -53,23 +52,9 @@ export class ThrottlingWarning extends LoggingError implements IThrottlingWarnin
         readonly fluidErrorCode: string,
         readonly retryAfterSeconds: number,
         props?: ITelemetryProperties,
+        innerError?: unknown,
     ) {
-        super(message, props);
-    }
-
-    /**
-     * Wrap the given error as a ThrottlingWarning, preserving any safe properties for logging
-     * and prefixing the wrapped error message with messagePrefix.
-     */
-    static wrap(
-        error: any,
-        errorCode: string,
-        retryAfterSeconds: number,
-        logger: ITelemetryLogger,
-    ): IThrottlingWarning {
-        const newErrorFn =
-            (errMsg: string) => new ThrottlingWarning(errMsg, errorCode, retryAfterSeconds);
-        return wrapErrorAndLog(error, newErrorFn, logger);
+        super(message, props, undefined, innerError);
     }
 }
 
@@ -117,8 +102,9 @@ export class DataProcessingError extends LoggingError implements IErrorBase, IFl
         errorMessage: string,
         readonly fluidErrorCode: string,
         props?: ITelemetryProperties,
+        innerError?: unknown,
     ) {
-        super(errorMessage, props);
+        super(errorMessage, props, undefined, innerError);
     }
 
     /**
@@ -133,17 +119,16 @@ export class DataProcessingError extends LoggingError implements IErrorBase, IFl
         dataProcessingCodepath: string,
         message?: ISequencedDocumentMessage,
     ): IFluidErrorBase {
-        const newErrorFn = (errMsg: string) => {
-            const dpe = new DataProcessingError(errMsg, "" /* fluidErrorCode */);
-            dpe.addTelemetryProperties({ untrustedOrigin: 1}); // To match normalizeError
-            return dpe;
-        };
-
         // Don't coerce if already has an errorType, to distinguish unknown errors from
         // errors that we raised which we already can interpret apart from this classification
         const error = isValidLegacyError(originalError) // also accepts valid Fluid Error
             ? normalizeError(originalError)
-            : wrapError(originalError, newErrorFn);
+            : new DataProcessingError(
+                extractLogSafeErrorProperties(originalError, false /* sanitizeStack */).message,
+                "" /* fluidErrorCode */,
+                undefined,
+                originalError,
+            );
 
         error.addTelemetryProperties({
             dataProcessingError: 1,

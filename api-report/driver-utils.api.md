@@ -176,7 +176,7 @@ export function ensureFluidResolvedUrl(resolved: IResolvedUrl | undefined): asse
 
 // @public
 export class GenericNetworkError extends LoggingError implements IDriverErrorBase, IFluidErrorBase {
-    constructor(fluidErrorCode: string, message: string, canRetry: boolean, props: DriverErrorTelemetryProps);
+    constructor(fluidErrorCode: string, message: string, canRetry: boolean, props: DriverErrorTelemetryProps, innerError?: unknown);
     // (undocumented)
     readonly canRetry: boolean;
     // (undocumented)
@@ -248,7 +248,7 @@ export class MultiUrlResolver implements IUrlResolver {
 
 // @public (undocumented)
 export class NetworkErrorBasic<T extends string> extends LoggingError implements IFluidErrorBase {
-    constructor(fluidErrorCode: string, message: string, errorType: T, canRetry: boolean, props: DriverErrorTelemetryProps);
+    constructor(fluidErrorCode: string, message: string, errorType: T, canRetry: boolean, props: DriverErrorTelemetryProps, innerError?: unknown);
     // (undocumented)
     readonly canRetry: boolean;
     // (undocumented)
@@ -259,7 +259,7 @@ export class NetworkErrorBasic<T extends string> extends LoggingError implements
 
 // @public (undocumented)
 export class NonRetryableError<T extends string> extends NetworkErrorBasic<T> {
-    constructor(fluidErrorCode: string, message: string | undefined, errorType: T, props: DriverErrorTelemetryProps);
+    constructor(fluidErrorCode: string, message: string | undefined, errorType: T, props: DriverErrorTelemetryProps, innerError?: unknown);
     // (undocumented)
     readonly errorType: T;
 }

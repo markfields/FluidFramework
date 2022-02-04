@@ -134,7 +134,7 @@ export const isILoggingError: (x: any) => x is ILoggingError;
 export function isTaggedTelemetryPropertyValue(x: any): x is ITaggedTelemetryPropertyType;
 
 // @public
-export function isValidLegacyError(e: any): e is Omit<IFluidErrorBase, "fluidErrorCode">;
+export function isValidLegacyError(e: any): e is Omit<IFluidErrorBase, "fluidErrorCode" | "errorInstanceId">;
 
 // @public (undocumented)
 export interface ITelemetryLoggerPropertyBag {
@@ -155,11 +155,15 @@ export function loggerToMonitoringContext<L extends ITelemetryBaseLogger = ITele
 
 // @public
 export class LoggingError extends Error implements ILoggingError, Pick<IFluidErrorBase, "errorInstanceId"> {
-    constructor(message: string, props?: ITelemetryProperties, omitPropsFromLogging?: Set<string>);
+    constructor(message: string, props?: ITelemetryProperties, omitPropsFromLogging?: Set<string>, innerError?: unknown);
     addTelemetryProperties(props: ITelemetryProperties): void;
     // (undocumented)
-    readonly errorInstanceId: string;
+    get errorInstanceId(): string;
     getTelemetryProperties(): ITelemetryProperties;
+    // (undocumented)
+    readonly innerError?: unknown;
+    // (undocumented)
+    logInnerError(logger: ITelemetryLogger): void;
     }
 
 // @public
@@ -296,12 +300,6 @@ export class ThresholdCounter {
     send(eventName: string, value: number): void;
     sendIfMultiple(eventName: string, value: number): void;
     }
-
-// @public
-export function wrapError<T extends IFluidErrorBase>(innerError: unknown, newErrorFn: (message: string) => T): T;
-
-// @public
-export function wrapErrorAndLog<T extends IFluidErrorBase>(innerError: unknown, newErrorFn: (message: string) => T, logger: ITelemetryLogger): T;
 
 
 // (No @packageDocumentation comment for this package)

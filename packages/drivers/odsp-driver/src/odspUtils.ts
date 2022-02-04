@@ -8,7 +8,7 @@ import { IResolvedUrl, DriverErrorType } from "@fluidframework/driver-definition
 import { isOnline, OnlineStatus, RetryableError, NonRetryableError } from "@fluidframework/driver-utils";
 import { assert, performance } from "@fluidframework/common-utils";
 import { ISequencedDocumentMessage, ISnapshotTree } from "@fluidframework/protocol-definitions";
-import { ChildLogger, PerformanceEvent, wrapError } from "@fluidframework/telemetry-utils";
+import { ChildLogger, PerformanceEvent } from "@fluidframework/telemetry-utils";
 import {
     fetchIncorrectResponse,
     throwOdspNetworkError,
@@ -307,14 +307,12 @@ export function toInstrumentedOdspTokenFetcher(
                 }
                 return token;
             }, (error) => {
-                const tokenError = wrapError(
-                    error,
-                    (errorMessage) => new NonRetryableError(
-                        "tokenFetcherFailed",
-                        errorMessage,
-                        OdspErrorType.fetchTokenError,
-                        { method: name, driverVersion }));
-                throw tokenError;
+                throw new NonRetryableError(
+                    "tokenFetcherFailed",
+                    undefined,
+                    OdspErrorType.fetchTokenError,
+                    { method: name, driverVersion },
+                    error);
             }),
             { cancel: "generic" });
     };

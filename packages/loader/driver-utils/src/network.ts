@@ -42,8 +42,9 @@ export class GenericNetworkError extends LoggingError implements IDriverErrorBas
         message: string,
         readonly canRetry: boolean,
         props: DriverErrorTelemetryProps,
+        innerError?: unknown,
     ) {
-        super(message, props);
+        super(message, props, undefined, innerError);
     }
 }
 
@@ -87,8 +88,9 @@ export class NetworkErrorBasic<T extends string> extends LoggingError implements
         readonly errorType: T,
         readonly canRetry: boolean,
         props: DriverErrorTelemetryProps,
+        innerError?: unknown,
     ) {
-        super(message, props);
+        super(message, props, undefined, innerError);
     }
 }
 
@@ -98,8 +100,9 @@ export class NonRetryableError<T extends string> extends NetworkErrorBasic<T> {
         message: string | undefined,
         readonly errorType: T,
         props: DriverErrorTelemetryProps,
+        innerError?: unknown,
     ) {
-        super(fluidErrorCode, message ?? fluidErrorCode, errorType, false, props);
+        super(fluidErrorCode, message ?? fluidErrorCode, errorType, false, props, innerError);
     }
 }
 

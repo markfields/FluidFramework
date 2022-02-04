@@ -48,13 +48,15 @@ export class SummarizingWarning extends LoggingError implements ISummarizingWarn
         errorMessage: string,
         readonly fluidErrorCode: string,
         readonly logged: boolean = false,
+        innerError?: unknown,
     ) {
-        super(errorMessage);
+        super(errorMessage, undefined, undefined, innerError);
     }
 
     static wrap(error: any, errorCode: string, logged: boolean = false, logger: ITelemetryLogger) {
-        const newErrorFn = (errMsg: string) => new SummarizingWarning(errMsg, errorCode, logged);
-        return wrapErrorAndLog<SummarizingWarning>(error, newErrorFn, logger);
+        const summarizerWarning = new SummarizingWarning(errorCode, errorCode, logged, error);
+        summarizerWarning.logInnerError(logger);
+        return summarizerWarning;
     }
 }
 
