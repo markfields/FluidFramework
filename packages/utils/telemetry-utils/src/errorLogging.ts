@@ -311,7 +311,10 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
             this.addTelemetryProperties({ innerErrorMessage: innerError.message });
         } else {
             // We have to assume the message may contain user data
-            this.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage } });
+            this.addTelemetryProperties({
+                innerErrorMessage: { tag: TelemetryDataTag.UserData, value: innerMessage },
+                untrustedOrigin: 1,
+            });
         }
 
         // Use the same errorInstanceId for this and innerError if possible
