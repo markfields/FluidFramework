@@ -18,11 +18,17 @@ import { assert, performance, TypedEventEmitter } from "@fluidframework/common-u
 import {
     TelemetryLogger,
     normalizeError,
+    IFluidErrorBase,
+    extractLogSafeErrorProperties,
+    isValidLegacyError,
+    isFluidError,
 } from "@fluidframework/telemetry-utils";
 import {
     IDocumentService,
     IDocumentDeltaConnection,
     IDocumentDeltaConnectionEvents,
+    IDriverErrorBase,
+    DriverErrorType,
 } from "@fluidframework/driver-definitions";
 import {
     ConnectionMode,
@@ -483,16 +489,35 @@ export class ConnectionManager implements IConnectionManager {
                     connection = undefined;
                 }
             } catch (origError) {
-                if (typeof origError === "object" && origError !== null &&
-                    origError?.errorType === DeltaStreamConnectionForbiddenError.errorType) {
+                // This will let me revert 0bc83544b812543882a
+                // Next, update throttled event to emit any driver error and the retryAfterSeconds separately
+
+                //* Move these elsewhere
+                function isAnyDriverError(e: any): e is IAnyDriverError & IFluidErrorBase {
+                    return typeof(e.canRetry) === "boolean" && isFluidError(e); //* Also check online
+                }
+                function wrapIfUnrecognized(e: unknown, newErrorFn?: (m: string) => IAnyDriverError,
+                ): IAnyDriverError & IFluidErrorBase {
+                    const n = normalizeError(e);
+                    // Normalize returned self, and furthermore it's a driver error
+                    if (n === e && isAnyDriverError(n)) {
+                        return n;
+                    }
+                    // errorType will be genericError, retry info will not be copied
+                    // nor should it be, because who knows the intended interpretation
+                    return Object.assign(n, { canRetry: false});
+                }
+
+                const error = wrapIfUnrecognized(origError);
+                if (error.errorType === DeltaStreamConnectionForbiddenError.errorType) {
                     connection = new NoDeltaStream();
                     requestedMode = "read";
                     break;
                 }
 
                 // Socket.io error when we connect to wrong socket, or hit some multiplexing bug
-                if (!canRetryOnError(origError)) {
-                    const error = normalizeError(origError, { props: fatalConnectErrorProp });
+                if (!canRetryOnError(error)) {
+                    error.addTelemetryProperties(fatalConnectErrorProp);
                     this.props.closeHandler(error);
                     throw error;
                 }
@@ -507,16 +532,16 @@ export class ConnectionManager implements IConnectionManager {
                             eventName: "DeltaConnectionFailureToConnect",
                             duration: TelemetryLogger.formatTick(performance.now() - connectStartTime),
                         },
-                        origError);
+                        error);
                 }
 
-                lastError = origError;
+                lastError = error;
 
-                const retryDelayFromError = getRetryDelayFromError(origError);
+                const retryDelayFromError = getRetryDelayFromError(error);
                 delayMs = retryDelayFromError ?? Math.min(delayMs * 2, MaxReconnectDelayInMs);
 
                 if (retryDelayFromError !== undefined) {
-                    this.props.reconnectionDelayHandler(retryDelayFromError, origError);
+                    this.props.reconnectionDelayHandler(retryDelayFromError, error);
                 }
                 await waitForConnectedState(delayMs);
             }
