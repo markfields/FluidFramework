@@ -604,11 +604,10 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
         if (delayMs > 0 && (timeNow + delayMs > this.timeTillThrottling)) {
             this.timeTillThrottling = timeNow + delayMs;
 
-            const throttlingWarning: IThrottlingWarning = ThrottlingWarning.wrap(
+            const throttlingWarning: IThrottlingWarning = ThrottlingWarning.create(
                 error,
                 "deltaManagerEmitDelayInfo",
                 delayMs / 1000 /* retryAfterSeconds */,
-                this.logger,
             );
             this.emit("throttled", throttlingWarning);
         }

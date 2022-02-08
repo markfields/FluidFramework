@@ -16,6 +16,7 @@ import {
     normalizeError,
     wrapError,
     wrapErrorAndLog,
+    extractLogSafeErrorProperties,
 } from "@fluidframework/telemetry-utils";
 import { ITelemetryLogger, ITelemetryProperties } from "@fluidframework/common-definitions";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
@@ -48,7 +49,7 @@ export class GenericError extends LoggingError implements IGenericError, IFluidE
 export class ThrottlingWarning extends LoggingError implements IThrottlingWarning, IFluidErrorBase {
     readonly errorType = ContainerErrorType.throttlingError;
 
-    constructor(
+    private constructor(
         message: string,
         readonly fluidErrorCode: string,
         readonly retryAfterSeconds: number,
@@ -58,19 +59,15 @@ export class ThrottlingWarning extends LoggingError implements IThrottlingWarnin
     }
 
     /**
-     * Wrap the given error as a ThrottlingWarning, preserving any safe properties for logging
-     * and prefixing the wrapped error message with messagePrefix.
+     * Create a ThrottlingWarning to raise on account of the given error
      */
-    static wrap(
-        error: any,
+    static create(
+        error: unknown,
         errorCode: string,
         retryAfterSeconds: number,
-        logger: ITelemetryLogger,
     ): IThrottlingWarning {
-        const newErrorFn =
-            (errMsg: string) => new ThrottlingWarning(errMsg, errorCode, retryAfterSeconds);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-        return wrapErrorAndLog(error, newErrorFn, logger);
+        const { message, errorType } = extractLogSafeErrorProperties(error, false /* sanitizeStack */);
+        return new ThrottlingWarning(`[${errorType}] ${message}`, errorCode, retryAfterSeconds);
     }
 }
 

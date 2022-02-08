@@ -19,16 +19,12 @@ import {
     TelemetryLogger,
     normalizeError,
     IFluidErrorBase,
-    extractLogSafeErrorProperties,
-    isValidLegacyError,
     isFluidError,
 } from "@fluidframework/telemetry-utils";
 import {
     IDocumentService,
     IDocumentDeltaConnection,
     IDocumentDeltaConnectionEvents,
-    IDriverErrorBase,
-    DriverErrorType,
 } from "@fluidframework/driver-definitions";
 import {
     ConnectionMode,
@@ -489,9 +485,6 @@ export class ConnectionManager implements IConnectionManager {
                     connection = undefined;
                 }
             } catch (origError) {
-                // This will let me revert 0bc83544b812543882a
-                // Next, update throttled event to emit any driver error and the retryAfterSeconds separately
-
                 //* Move these elsewhere
                 function isAnyDriverError(e: any): e is IAnyDriverError & IFluidErrorBase {
                     return typeof(e.canRetry) === "boolean" && isFluidError(e); //* Also check online
