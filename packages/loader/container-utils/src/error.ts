@@ -15,10 +15,9 @@ import {
     IFluidErrorBase,
     normalizeError,
     wrapError,
-    wrapErrorAndLog,
     extractLogSafeErrorProperties,
 } from "@fluidframework/telemetry-utils";
-import { ITelemetryLogger, ITelemetryProperties } from "@fluidframework/common-definitions";
+import { ITelemetryProperties } from "@fluidframework/common-definitions";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
 
 /**

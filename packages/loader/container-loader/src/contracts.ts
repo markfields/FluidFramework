@@ -12,6 +12,7 @@ import {
     IConnectionDetails,
     ICriticalContainerError,
 } from "@fluidframework/container-definitions";
+import { IAnyDriverError } from "@fluidframework/driver-utils";
 import {
     ConnectionMode,
     IDocumentMessage,
