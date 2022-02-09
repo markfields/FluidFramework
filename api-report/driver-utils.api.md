@@ -174,6 +174,9 @@ export type DriverErrorTelemetryProps = ITelemetryProperties & {
 // @public (undocumented)
 export const emptyMessageStream: IStream<ISequencedDocumentMessage[]>;
 
+// @public
+export function ensureDriverError(error: unknown): IAnyDriverError & IFluidErrorBase;
+
 // @public (undocumented)
 export function ensureFluidResolvedUrl(resolved: IResolvedUrl | undefined): asserts resolved is IFluidResolvedUrl;
 
@@ -228,6 +231,9 @@ export interface IProgress {
     cancel?: AbortSignal;
     retry?(delayInMs: number, error: any): void;
 }
+
+// @public
+export function isAnyDriverError(e: any): e is IAnyDriverError;
 
 // @public (undocumented)
 export const isFluidResolvedUrl: (resolved: IResolvedUrl | undefined) => resolved is IFluidResolvedUrl;

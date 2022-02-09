@@ -10,7 +10,7 @@ import {
     DriverErrorType,
 } from "@fluidframework/driver-definitions";
 import { ITelemetryProperties } from "@fluidframework/common-definitions";
-import { IFluidErrorBase, LoggingError } from "@fluidframework/telemetry-utils";
+import { IFluidErrorBase, LoggingError, normalizeError } from "@fluidframework/telemetry-utils";
 
 export enum OnlineStatus {
     Offline,
@@ -37,11 +37,37 @@ export function isOnline(): OnlineStatus {
  * It will be either DriverErrorType or the specific driver's specialized error type enum,
  * but we can't reference a specific driver's error type enum in this code.
  */
- export interface IAnyDriverError {
+export interface IAnyDriverError {
     readonly errorType: string;
     readonly message: string;
     canRetry: boolean;
     online?: string;
+}
+
+/** Type guard for IAnyDriverError interface */
+function isAnyDriverError(e: any): e is IAnyDriverError {
+    return (
+        typeof(e.errorType) === "string" &&
+        typeof(e.message) === "string" &&
+        typeof(e.canRetry) === "boolean" &&
+        typeof(e.online) === "string");
+}
+
+/**
+ * Leverages normalizeError to yield a valid driver error
+ * Returns the given error itself if possible, and otherwise creates a new error using the error's message and stack
+ */
+export function ensureDriverError(error: unknown): IAnyDriverError & IFluidErrorBase {
+    const fluidError = normalizeError(error);
+    if (fluidError === error && isAnyDriverError(fluidError)) {
+        // Normalize returned self, and furthermore it's a driver error.  All set.
+        return fluidError;
+    }
+
+    // errorType will be genericError thanks to normalizeError
+    // Set canRetry to false, deliberately ignoring existing canRetry since we didn't create this error ourselves
+    const genericDriverError = Object.assign(fluidError, { canRetry: false});
+    return genericDriverError;
 }
 
 /** Telemetry props with driver-specific required properties */

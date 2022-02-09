@@ -18,8 +18,6 @@ import { assert, performance, TypedEventEmitter } from "@fluidframework/common-u
 import {
     TelemetryLogger,
     normalizeError,
-    IFluidErrorBase,
-    isFluidError,
 } from "@fluidframework/telemetry-utils";
 import {
     IDocumentService,
@@ -46,6 +44,7 @@ import {
     canRetryOnError,
     createWriteError,
     createGenericNetworkError,
+    ensureDriverError,
     getRetryDelayFromError,
     IAnyDriverError,
     logNetworkFailure,
@@ -484,24 +483,8 @@ export class ConnectionManager implements IConnectionManager {
                     this.logger.sendTelemetryEvent({ eventName: "ReceivedClosedConnection" });
                     connection = undefined;
                 }
-            } catch (origError) {
-                //* Move these elsewhere
-                function isAnyDriverError(e: any): e is IAnyDriverError & IFluidErrorBase {
-                    return typeof(e.canRetry) === "boolean" && isFluidError(e); //* Also check online
-                }
-                function wrapIfUnrecognized(e: unknown, newErrorFn?: (m: string) => IAnyDriverError,
-                ): IAnyDriverError & IFluidErrorBase {
-                    const n = normalizeError(e);
-                    // Normalize returned self, and furthermore it's a driver error
-                    if (n === e && isAnyDriverError(n)) {
-                        return n;
-                    }
-                    // errorType will be genericError, retry info will not be copied
-                    // nor should it be, because who knows the intended interpretation
-                    return Object.assign(n, { canRetry: false});
-                }
-
-                const error = wrapIfUnrecognized(origError);
+            } catch (origError: unknown) {
+                const error = ensureDriverError(origError);
                 if (error.errorType === DeltaStreamConnectionForbiddenError.errorType) {
                     connection = new NoDeltaStream();
                     requestedMode = "read";
@@ -515,12 +498,16 @@ export class ConnectionManager implements IConnectionManager {
                     throw error;
                 }
 
-                // Log error once - we get too many errors in logs when we are offline,
+                const serverThrottlingDelay = getRetryDelayFromError(error);
+                delayMs = serverThrottlingDelay ?? Math.min(delayMs * 2, MaxReconnectDelayInMs);
+
+                // Don't log the error every time - we get too many errors in logs when we are offline,
                 // and unfortunately there is no reliable way to detect that.
-                if (connectRepeatCount === 1) {
+                if (connectRepeatCount === 1 || serverThrottlingDelay !== undefined) {
                     logNetworkFailure(
                         this.logger,
                         {
+                            attempts: connectRepeatCount,
                             delay: delayMs, // milliseconds
                             eventName: "DeltaConnectionFailureToConnect",
                             duration: TelemetryLogger.formatTick(performance.now() - connectStartTime),
@@ -530,11 +517,8 @@ export class ConnectionManager implements IConnectionManager {
 
                 lastError = error;
 
-                const retryDelayFromError = getRetryDelayFromError(error);
-                delayMs = retryDelayFromError ?? Math.min(delayMs * 2, MaxReconnectDelayInMs);
-
-                if (retryDelayFromError !== undefined) {
-                    this.props.reconnectionDelayHandler(retryDelayFromError, error);
+                if (serverThrottlingDelay !== undefined) {
+                    this.props.reconnectionDelayHandler(serverThrottlingDelay, error);
                 }
                 await waitForConnectedState(delayMs);
             }
@@ -717,7 +701,7 @@ export class ConnectionManager implements IConnectionManager {
         error: IAnyDriverError,
     ) {
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        this.reconnectOnErrorCore(
+        this.reconnect(
             requestedMode,
             error.message,
             error);
@@ -730,7 +714,7 @@ export class ConnectionManager implements IConnectionManager {
      * @param error - Error reconnect information including whether or not to reconnect
      * @returns A promise that resolves when the connection is reestablished or we stop trying
      */
-    private async reconnectOnErrorCore(
+    private async reconnect(
         requestedMode: ConnectionMode,
         disconnectMessage: string,
         error?: IAnyDriverError,
@@ -830,7 +814,7 @@ export class ConnectionManager implements IConnectionManager {
                 this.pendingReconnect = true;
                 Promise.resolve().then(async () => {
                     if (this.pendingReconnect) { // still valid?
-                        await this.reconnectOnErrorCore(
+                        await this.reconnect(
                             "write", // connectionMode
                             "Switch to write", // message
                         );

@@ -8,7 +8,6 @@ import { IErrorBase } from '@fluidframework/container-definitions';
 import { IFluidErrorBase } from '@fluidframework/telemetry-utils';
 import { IGenericError } from '@fluidframework/container-definitions';
 import { ISequencedDocumentMessage } from '@fluidframework/protocol-definitions';
-import { ITelemetryLogger } from '@fluidframework/common-definitions';
 import { ITelemetryProperties } from '@fluidframework/common-definitions';
 import { IThrottlingWarning } from '@fluidframework/container-definitions';
 import { LoggingError } from '@fluidframework/telemetry-utils';
@@ -73,14 +72,13 @@ export class GenericError extends LoggingError implements IGenericError, IFluidE
 
 // @public
 export class ThrottlingWarning extends LoggingError implements IThrottlingWarning, IFluidErrorBase {
-    constructor(message: string, fluidErrorCode: string, retryAfterSeconds: number, props?: ITelemetryProperties);
+    static create(error: unknown, errorCode: string, retryAfterSeconds: number): IThrottlingWarning;
     // (undocumented)
     readonly errorType = ContainerErrorType.throttlingError;
     // (undocumented)
     readonly fluidErrorCode: string;
     // (undocumented)
     readonly retryAfterSeconds: number;
-    static wrap(error: any, errorCode: string, retryAfterSeconds: number, logger: ITelemetryLogger): IThrottlingWarning;
 }
 
 // @public
