@@ -10,7 +10,7 @@ import { ILoader, LoaderHeader } from "@fluidframework/container-definitions";
 import { UsageError } from "@fluidframework/container-utils";
 import { DriverHeader } from "@fluidframework/driver-definitions";
 import { requestFluidObject } from "@fluidframework/runtime-utils";
-import { ChildLogger, IFluidErrorBase, LoggingError, wrapErrorAndLog } from "@fluidframework/telemetry-utils";
+import { ChildLogger, IFluidErrorBase, LoggingError, wrapError } from "@fluidframework/telemetry-utils";
 import {
     FluidObject,
     IFluidHandleContext,
@@ -44,7 +44,7 @@ export class SummarizingWarning extends LoggingError implements ISummarizingWarn
     readonly errorType = summarizingError;
     readonly canRetry = true;
 
-    constructor(
+    private constructor(
         errorMessage: string,
         readonly fluidErrorCode: string,
         readonly logged: boolean = false,
@@ -52,14 +52,23 @@ export class SummarizingWarning extends LoggingError implements ISummarizingWarn
         super(errorMessage);
     }
 
-    static wrap(error: any, errorCode: string, logged: boolean = false, logger: ITelemetryLogger) {
-        const newErrorFn = (errMsg: string) => new SummarizingWarning(errMsg, errorCode, logged);
-        return wrapErrorAndLog<SummarizingWarning>(error, newErrorFn, logger);
+    static create =
+        (errorCode: string, logged: boolean) => new SummarizingWarning(errorCode, errorCode, logged);
+
+    static wrap(error: any, errorCode: string, logger: ITelemetryLogger) {
+        const newErrorFn = (errMsg: string) => new SummarizingWarning(errMsg, errorCode, false /* logged */);
+        const summarizingError = wrapError<SummarizingWarning>(error, newErrorFn);
+
+        // Log the first error, ensuring errorInstanceId is included
+        logger.sendTelemetryEvent({
+            eventName: "wrapAsSummerizingWarning",
+            errorItanceId: summarizingError.errorInstanceId,
+        },
+        error);
+
+        return summarizingError;
     }
 }
-
-export const createSummarizingWarning =
-    (errorCode: string, logged: boolean) => new SummarizingWarning(errorCode, errorCode, logged);
 
 /**
  * Summarizer is responsible for coordinating when to generate and send summaries.
@@ -144,7 +153,7 @@ export class Summarizer extends EventEmitter implements ISummarizer {
             return await this.runCore(onBehalfOf, options);
         } catch (error) {
             this.stop("summarizerException");
-            throw SummarizingWarning.wrap(error, "summarizerRun", false /* logged */, this.logger);
+            throw SummarizingWarning.wrap(error, "summarizerRun", this.logger);
         } finally {
             this.dispose();
             this.runtime.closeFn();
@@ -259,7 +268,7 @@ export class Summarizer extends EventEmitter implements ISummarizer {
             ),
             (errorCode: string) => {
                 if (!this._disposed) {
-                    this.emit("summarizingError", createSummarizingWarning(errorCode, true));
+                    this.emit("summarizingError", SummarizingWarning.create(errorCode, true));
                 }
             },
             this.summaryCollection,
@@ -356,7 +365,7 @@ export class Summarizer extends EventEmitter implements ISummarizer {
             return builder.build();
         }
         catch (error) {
-            throw SummarizingWarning.wrap(error, "summarizerRun", false /* logged */, this.logger);
+            throw SummarizingWarning.wrap(error, "summarizeOnDemand", this.logger);
         }
     };
 

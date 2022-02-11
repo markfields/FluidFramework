@@ -15,7 +15,6 @@ import {
     IFluidErrorBase,
     normalizeError,
     wrapError,
-    wrapErrorAndLog,
 } from "@fluidframework/telemetry-utils";
 import { ITelemetryLogger, ITelemetryProperties } from "@fluidframework/common-definitions";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
@@ -69,8 +68,16 @@ export class ThrottlingWarning extends LoggingError implements IThrottlingWarnin
     ): IThrottlingWarning {
         const newErrorFn =
             (errMsg: string) => new ThrottlingWarning(errMsg, errorCode, retryAfterSeconds);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-        return wrapErrorAndLog(error, newErrorFn, logger);
+        const throttlingWarning = wrapError(error, newErrorFn);
+
+        // Log the first error, ensuring errorInstanceId is included
+        logger.sendTelemetryEvent({
+            eventName: "wrapAsThrottlingWarning",
+            errorItanceId: throttlingWarning.errorInstanceId,
+        },
+        error);
+
+        return throttlingWarning;
     }
 }
 

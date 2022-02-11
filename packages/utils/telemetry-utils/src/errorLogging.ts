@@ -6,7 +6,6 @@
 import {
     ILoggingError,
     ITaggedTelemetryPropertyType,
-    ITelemetryLogger,
     ITelemetryProperties,
 } from "@fluidframework/common-definitions";
 import { v4 as uuid } from "uuid";
@@ -171,7 +170,7 @@ export function generateStack(): string | undefined {
  * @param newErrorFn - callback that will create a new error given the original error's message
  * @returns A new error object "wrapping" the given error
  */
- export function wrapError<T extends IFluidErrorBase>(
+ export function wrapError<T extends IFluidErrorBase & LoggingError>(
     innerError: unknown,
     newErrorFn: (message: string) => T,
 ): T {
@@ -186,28 +185,15 @@ export function generateStack(): string | undefined {
         overwriteStack(newError, stack);
     }
 
+    // Both errors should have the same errorInstanceId if possible
     if (hasErrorInstanceId(innerError)) {
-        newError.addTelemetryProperties({ innerErrorInstanceId: innerError.errorInstanceId });
+        newError.overwriteErrorInstanceId(innerError.errorInstanceId);
     }
-
-    return newError;
-}
-
-/** The same as wrapError, but also logs the innerError, including the wrapping error's instance id */
-export function wrapErrorAndLog<T extends IFluidErrorBase>(
-    innerError: unknown,
-    newErrorFn: (message: string) => T,
-    logger: ITelemetryLogger,
-) {
-    const newError = wrapError(innerError, newErrorFn);
-    const wrappedByErrorInstanceId = hasErrorInstanceId(newError)
-        ? newError.errorInstanceId
-        : undefined;
-
-    logger.sendTelemetryEvent({
-        eventName: "WrapError",
-        wrappedByErrorInstanceId,
-    }, innerError);
+    else {
+        try {
+            Object.assign(innerError, { errorInstanceId: newError.errorInstanceId });
+        } catch (_) {}
+    }
 
     return newError;
 }
@@ -287,7 +273,11 @@ export const getCircularReplacer = () => {
  * PLEASE take care to avoid setting sensitive data on this object without proper tagging!
  */
 export class LoggingError extends Error implements ILoggingError, Pick<IFluidErrorBase, "errorInstanceId"> {
-    readonly errorInstanceId = uuid();
+    protected _errorInstanceId = uuid();
+    get errorInstanceId() { return this._errorInstanceId; }
+    public overwriteErrorInstanceId(errorInstanceId: string) {
+        this._errorInstanceId = errorInstanceId;
+    }
 
     /**
      * Create a new LoggingError
@@ -302,8 +292,9 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
     ) {
         super(message);
 
-        // Don't log this list itself either
+        // Don't log this list itself, or the private _errorInstanceId
         omitPropsFromLogging.add("omitPropsFromLogging");
+        omitPropsFromLogging.add("_errorInstanceId");
 
         if (props) {
             this.addTelemetryProperties(props);

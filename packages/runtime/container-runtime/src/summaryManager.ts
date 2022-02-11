@@ -7,7 +7,7 @@ import { IDisposable, IEvent, IEventProvider, ITelemetryLogger } from "@fluidfra
 import { TypedEventEmitter, assert } from "@fluidframework/common-utils";
 import { ChildLogger, PerformanceEvent } from "@fluidframework/telemetry-utils";
 import { DriverErrorType } from "@fluidframework/driver-definitions";
-import { createSummarizingWarning } from "./summarizer";
+import { SummarizingWarning } from "./summarizer";
 import { ISummarizerClientElection } from "./summarizerClientElection";
 import { IThrottler } from "./throttler";
 import {
@@ -299,7 +299,7 @@ export class SummaryManager extends TypedEventEmitter<ISummaryManagerEvents> imp
         if (delayMs > 0 && delayMs > this.startThrottler.maxDelayMs) {
             this.emit(
                 "summarizerWarning",
-                createSummarizingWarning("summaryManagerCreateSummarizerMaxThrottleDelay", false),
+                SummarizingWarning.create("summaryManagerCreateSummarizerMaxThrottleDelay", false),
             );
         }
 

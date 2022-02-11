@@ -10,9 +10,8 @@ import sinon from "sinon";
 import { v4 as uuid } from "uuid";
 import { ITelemetryBaseEvent, ITelemetryProperties } from "@fluidframework/common-definitions";
 import { TelemetryDataTag, TelemetryLogger, TaggedLoggerAdapter } from "../logger";
-import { LoggingError, isTaggedTelemetryPropertyValue, normalizeError, IFluidErrorAnnotations, wrapError, wrapErrorAndLog, extractLogSafeErrorProperties } from "../errorLogging";
+import { LoggingError, isTaggedTelemetryPropertyValue, normalizeError, IFluidErrorAnnotations, wrapError, extractLogSafeErrorProperties } from "../errorLogging";
 import { IFluidErrorBase } from "../fluidErrorBase";
-import { MockLogger } from "../mockLogger";
 
 describe("Error Logging", () => {
     describe("TelemetryLogger.prepareErrorObject", () => {
@@ -653,14 +652,4 @@ describe("wrapError", () => {
         const newError = wrapError(innerError, (message) => (new LoggingError(message)) as LoggingError & { fluidErrorCode: "fluidErrorCode", errorType: "genericError" });
         assert(newError.getTelemetryProperties().innerErrorInstanceId === innerError.errorInstanceId);
     });
-});
-describe("wrapErrorAndLog", () => {
-    const mockLogger = new MockLogger();
-    const innerError = new LoggingError("hello");
-    const newError = wrapErrorAndLog(innerError, (message) => (new LoggingError(message)) as LoggingError & { fluidErrorCode: "fluidErrorCode", errorType: "genericError" }, mockLogger);
-    assert(mockLogger.matchEvents([{
-        eventName: "WrapError",
-        wrappedByErrorInstanceId: newError.errorInstanceId,
-        error: "hello",
-     }]), "Expected the 'WrapError' event to be logged");
 });
