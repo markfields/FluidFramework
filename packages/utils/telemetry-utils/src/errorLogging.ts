@@ -176,10 +176,11 @@ export function generateStack(): string | undefined {
 ): T {
     const {
         message,
+        errorType,
         stack,
     } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
 
-    const newError = newErrorFn(message);
+    const newError = newErrorFn(`[${errorType}] ${message}`);
 
     if (stack !== undefined) {
         overwriteStack(newError, stack);
@@ -193,6 +194,11 @@ export function generateStack(): string | undefined {
         try {
             Object.assign(innerError, { errorInstanceId: newError.errorInstanceId });
         } catch (_) {}
+    }
+
+    // Copy over telemetry props (this won't overwrite newError's existing props like errorType)
+    if (isILoggingError(innerError)) {
+        newError.addTelemetryProperties(innerError.getTelemetryProperties());
     }
 
     return newError;
