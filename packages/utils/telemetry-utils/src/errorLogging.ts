@@ -172,25 +172,26 @@ export function generateStack(): string | undefined {
 }
 
 //* Call this for socket errors, token provider errors, fetch exeptions, DPE.
-export function wrapExternalError<T extends LoggingError>(
-    innerError: unknown,
+export function wrapExternalError<T extends IFluidErrorBase>(  //* Need to sort out IFEB v. LoggingError
+    error: unknown,
     newErrorFn: () => T,
-): T {
-    const {
-        message,
-    } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
-
-    if (isExternalError(innerError)) {
-        const newError = newErrorFn();
-        //* But don't really tag it
-        newError.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: message }});
-
-        //* Do some other stuff like with stack and props
-        return newError;
+): IFluidErrorBase | T {
+    if (isRecognizedError(error)) {
+        return error;
     }
 
-    //* Figure out sequence of if checks etc
-    return innerError;
+    const {
+        message,
+    } = extractLogSafeErrorProperties(error, false /* sanitizeStack */);
+
+    const newError = newErrorFn();
+    newError.addTelemetryProperties({
+        innerErrorMessage: { tag: TelemetryDataTag.UserData, value: message }, //* But don't really tag it
+        untrustedOrigin: 1,
+    });
+
+    //* Do some other stuff like with stack (and props?)
+    return newError;
 }
 
 /**
@@ -280,6 +281,10 @@ export function isExternalError(e: any): boolean {
     return !isValidLegacyError(e) ||
         (e.getTelemetryProperties().untrustedOrigin === 1 &&
          e.errorType === defaultErrorTypeForNormalize);
+}
+
+export function isRecognizedError(e: any): e is IFluidErrorBase { //* ish
+    return !isExternalError(e);
 }
 
 /**
