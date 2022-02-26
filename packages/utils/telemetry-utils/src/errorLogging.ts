@@ -16,6 +16,7 @@ import {
     isFluidError,
     isValidLegacyError,
 } from "./fluidErrorBase";
+import { TelemetryDataTag } from "./logger";
 
 /** @returns true if value is an object but neither null nor an array */
 const isRegularObject = (value: any): boolean => {
@@ -168,6 +169,28 @@ let stackPopulatedOnCreation: boolean | undefined;
 
 export function generateStack(): string | undefined {
     return generateErrorWithStack().stack;
+}
+
+//* Call this for socket errors, token provider errors, fetch exeptions, DPE.
+export function wrapExternalError<T extends LoggingError>(
+    innerError: unknown,
+    newErrorFn: () => T,
+): T {
+    const {
+        message,
+    } = extractLogSafeErrorProperties(innerError, false /* sanitizeStack */);
+
+    if (isExternalError(innerError)) {
+        const newError = newErrorFn();
+        //* But don't really tag it
+        newError.addTelemetryProperties({ innerErrorMessage: { tag: TelemetryDataTag.UserData, value: message }});
+
+        //* Do some other stuff like with stack and props
+        return newError;
+    }
+
+    //* Figure out sequence of if checks etc
+    return innerError;
 }
 
 /**
