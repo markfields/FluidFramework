@@ -479,6 +479,7 @@ function throwBufferParseException(
     expectedNodeType: NodeType,
     message: string,
 ): never {
+    //* Wrap?
     throw new NonRetryableError(
         `Buffer parsing exception: ${message}`,
         DriverErrorType.incorrectServerResponse,
