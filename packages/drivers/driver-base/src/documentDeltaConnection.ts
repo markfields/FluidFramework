@@ -572,6 +572,7 @@ export class DocumentDeltaConnection
         } else {
             message = "[object omitted]";
         }
+        //* Wrap?
         const errorObj = createGenericNetworkError(
             `socket.io (${handler}): ${message}`,
             { canRetry },

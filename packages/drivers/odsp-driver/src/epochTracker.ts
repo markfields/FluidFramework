@@ -336,7 +336,7 @@ export class EpochTracker implements IPersistedFileCache {
             // If it was categorized as epoch error but the epoch returned in response matches with the client epoch
             // then it was coherency 409, so rethrow it as throttling error so that it can retried. Default throttling
             // time is 1s.
-            throw new ThrottlingError(
+            throw new ThrottlingError( //* Wrap
                 `Coherency 409: ${error.message}`,
                 1 /* retryAfterSeconds */,
                 { [Odsp409Error]: true, driverVersion });
