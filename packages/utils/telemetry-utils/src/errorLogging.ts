@@ -79,18 +79,16 @@ export interface IFluidErrorAnnotations {
     props?: ITelemetryProperties;
 }
 
-/** For backwards compatibility with pre-fluidErrorCode valid errors */
+/** For backwards compatibility with pre-errorInstanceId valid errors */
 function patchLegacyError(
-    legacyError: Omit<IFluidErrorBase, "fluidErrorCode" | "errorInstanceId">,
+    legacyError: Omit<IFluidErrorBase, "errorInstanceId">,
 ): asserts legacyError is IFluidErrorBase {
-    const patchMe: { -readonly [P in "fluidErrorCode" | "errorInstanceId"]?: IFluidErrorBase[P] } = legacyError as any;
-    if (patchMe.fluidErrorCode === undefined) {
-        patchMe.fluidErrorCode = "<error predates fluidErrorCode>";
-    }
+    const patchMe: { -readonly [P in "errorInstanceId"]?: IFluidErrorBase[P] } = legacyError as any;
     if (patchMe.errorInstanceId === undefined) {
         patchMe.errorInstanceId = uuid();
     }
 }
+
 
 // errorType "genericError" is used as a default value throughout the code.
 // Note that this matches ContainerErrorType/DriverErrorType's genericError
@@ -121,7 +119,6 @@ export function normalizeError(
     const { message, stack } = extractLogSafeErrorProperties(error, false /* sanitizeStack */);
     const fluidError: IFluidErrorBase = new SimpleFluidError({
         errorType: defaultErrorTypeForNormalize,
-        fluidErrorCode: "",
         message,
         stack,
     });
@@ -357,6 +354,10 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
     get errorInstanceId() { return this._errorInstanceId; }
     overwriteErrorInstanceId(id: string) { this._errorInstanceId = id; }
 
+    /** Back-compat to appease isFluidError typeguard in old code that may handle this error */
+    // @ts-expect-error - This field shouldn't be referenced in the current version, but needs to exist at runtime.
+    private fluidErrorCode: "-" = "-";
+
     /**
      * Create a new LoggingError
      * @param message - Error message to use for Error base class
@@ -404,18 +405,16 @@ export class LoggingError extends Error implements ILoggingError, Pick<IFluidErr
 /** Simple implementation of IFluidErrorBase, extending LoggingError */
 class SimpleFluidError extends LoggingError implements IFluidErrorBase {
     readonly errorType: string;
-    readonly fluidErrorCode: string;
 
     constructor(
-        errorProps: Omit<IFluidErrorBase,
-            | "getTelemetryProperties"
-            | "addTelemetryProperties"
-            | "errorInstanceId"
-            | "name">,
+        errorProps: Pick<IFluidErrorBase,
+            | "message"
+            | "stack"
+            | "errorType"
+        >,
     ) {
         super(errorProps.message);
         this.errorType = errorProps.errorType;
-        this.fluidErrorCode = errorProps.fluidErrorCode;
         if (errorProps.stack !== undefined) {
             overwriteStack(this, errorProps.stack);
         }
