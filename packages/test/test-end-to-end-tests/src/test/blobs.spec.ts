@@ -230,9 +230,17 @@ describeNoCompat("blobs", (getTestObjectProvider) => {
         }
     });
 
+    function skipForTinylicious(context: Mocha.Context) {
+        if (provider.driver.type === "tinylicious") {
+            context.skip();
+        }
+    }
+
     itExpects("works in detached container", [
         {"eventName": "fluid:telemetry:Container:ContainerClose", "error": "0x202"}
     ], async function() {
+        skipForTinylicious(this); // https://github.com/microsoft/FluidFramework/issues/9446
+
         const detachedBlobStorage = new MockDetachedBlobStorage();
         const loader = provider.makeTestLoader({ ...testContainerConfig, loaderProps: {detachedBlobStorage}});
         const container = await loader.createDetachedContainer(provider.defaultCodeDetails);
@@ -284,6 +292,8 @@ describeNoCompat("blobs", (getTestObjectProvider) => {
     itExpects("redirect table saved in snapshot",[
         {"eventName": "fluid:telemetry:Container:ContainerClose","message": "0x202",}
     ], async function() {
+        skipForTinylicious(this); // https://github.com/microsoft/FluidFramework/issues/9446
+
         const detachedBlobStorage = new MockDetachedBlobStorage();
         const loader = provider.makeTestLoader({ ...testContainerConfig, loaderProps: {detachedBlobStorage}});
         const detachedContainer = await loader.createDetachedContainer(provider.defaultCodeDetails);
@@ -318,6 +328,8 @@ describeNoCompat("blobs", (getTestObjectProvider) => {
     itExpects("serialize/rehydrate then attach", [
         {"eventName": "fluid:telemetry:Container:ContainerClose", "error": "0x202"}
     ], async function() {
+        skipForTinylicious(this); // https://github.com/microsoft/FluidFramework/issues/9446
+
         const loader = provider.makeTestLoader(
             {...testContainerConfig, loaderProps: {detachedBlobStorage: new MockDetachedBlobStorage()}});
         const serializeContainer = await loader.createDetachedContainer(provider.defaultCodeDetails);
@@ -348,6 +360,8 @@ describeNoCompat("blobs", (getTestObjectProvider) => {
     itExpects("serialize/rehydrate multiple times then attach",[
         {"eventName": "fluid:telemetry:Container:ContainerClose", "error": "0x202"}
     ], async function() {
+        skipForTinylicious(this); // https://github.com/microsoft/FluidFramework/issues/9446
+
         const loader = provider.makeTestLoader(
             {...testContainerConfig, loaderProps: {detachedBlobStorage: new MockDetachedBlobStorage()}});
         let container = await loader.createDetachedContainer(provider.defaultCodeDetails);
