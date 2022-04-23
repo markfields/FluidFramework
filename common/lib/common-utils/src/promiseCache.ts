@@ -108,22 +108,22 @@ class MapWithExpiration<TKey, TValue> extends Map<TKey, TValue> implements IDisp
         }
     }
 
-    private resetExpiration(key: TKey, expiryMs) {
+    resetExpiration(key: TKey) {
         this.cancelExpiration(key);
-        this.scheduleExpiration(key, expiryMs);
+        if (this.expiration.policy !== "indefinite") {
+            this.scheduleExpiration(key, this.expiration.durationMs);
+        }
     }
 
     get(key: TKey): TValue | undefined {
         if (this.expiration.policy === "sliding") {
-            this.resetExpiration(key, this.expiration.durationMs);
+            this.resetExpiration(key);
         }
         return super.get(key);
     }
 
     set(key: TKey, value: TValue): this {
-        if (this.expiration.policy !== "indefinite") {
-            this.resetExpiration(key, this.expiration.durationMs);
-        }
+        this.resetExpiration(key);
         return super.set(key, value);
     }
 
@@ -208,7 +208,11 @@ async function test() {
         operation,
         (p11, p2) => p11,
         cache);
-    const result = await opWithCache.getResult("hello", 1);
+    const resultP = opWithCache.getResult("hello", 1);
+
+    //* Thinking about whether the promise resolving should reset expiration.
+    //* Could do this automatically in PromiseCache but not in AsyncOperationWithCaching
+    return resultP.then(() => cache.resetExpiration("hello"));
 }
 
 /**
@@ -279,7 +283,12 @@ export class PromiseCache<TKey, TResult> {
             this.cache.set(key, promise);
 
             // If asyncFn throws, we may remove the Promise from the cache
-            promise.catch((error) => {
+            promise
+            .then(() => {
+                //* Is this a good idea?  Basically what if the asyncFn takes most of the expiration time? Anybody care?
+                this.gc.update(key);
+            })
+            .catch((error) => {
                 if (this.removeOnError(error)) {
                     this.remove(key);
                 }
