@@ -4,11 +4,14 @@
  * Licensed under the MIT License.
  */
 
+import { IDisposable } from "@fluidframework/common-definitions";
+
 /**
  * Three supported expiry policies:
  * - indefinite: entries don't expire and must be explicitly removed
  * - absolute: entries expire after the given duration in MS, even if accessed multiple times in the mean time
  * - sliding: entries expire after the given duration in MS of inactivity (i.e. get resets the clock)
+ * - slidingOnWrite: //* TODO - Is this a good policy? This is what OdspCache does. Maybe support it
  */
 export type PromiseCacheExpiry =
     | {
@@ -78,34 +81,109 @@ class GarbageCollector<TKey> {
         }
     }
 }
+class MapWithExpiration<TKey, TValue> extends Map<TKey, TValue> implements IDisposable {
+    public disposed: boolean = false;
+    private readonly expirationTimeouts = new Map<TKey, ReturnType<typeof setTimeout>>();
 
-class AsyncOperationWithCaching<TOperation extends (...args: any[]) => Promise<any>, TKey> {
     constructor(
-        private readonly operation: TOperation, // (...params: Parameters<TOperation>) => Promise<ReturnType<TOperation>>,
+        private readonly expiration: PromiseCacheExpiry,
+    ) {
+        super();
+    }
+    private scheduleExpiration(key: TKey, expiryMs: number) {
+        this.expirationTimeouts.set(
+            key,
+            setTimeout(
+                () => { this.delete(key); },
+                expiryMs,
+            ),
+        );
+    }
+
+    private cancelExpiration(key: TKey) {
+        const timeout = this.expirationTimeouts.get(key);
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
+            this.expirationTimeouts.delete(key);
+        }
+    }
+
+    private resetExpiration(key: TKey, expiryMs) {
+        this.cancelExpiration(key);
+        this.scheduleExpiration(key, expiryMs);
+    }
+
+    get(key: TKey): TValue | undefined {
+        if (this.expiration.policy === "sliding") {
+            this.resetExpiration(key, this.expiration.durationMs);
+        }
+        return super.get(key);
+    }
+
+    set(key: TKey, value: TValue): this {
+        if (this.expiration.policy !== "indefinite") {
+            this.resetExpiration(key, this.expiration.durationMs);
+        }
+        return super.set(key, value);
+    }
+
+    delete(key: TKey): boolean {
+        this.cancelExpiration(key);
+        return super.delete(key);
+    }
+
+    dispose(_error?: Error): void {
+        if (this.disposed) {
+            return;
+        }
+        this.disposed = true;
+        Array.from(this).forEach(([key]) => this.cancelExpiration(key));
+    }
+}
+
+type AwaitedReturnType<T extends (...args: any[]) => any> =
+    ReturnType<T> extends Promise<infer U>
+        ? U
+        : never;
+
+/**
+ * A wrapper for an async operation that builds in safe caching of the result of the operation
+ * to avoid duplicating the async work
+ */
+class AsyncOperationWithCaching<TOperation extends (...args: any[]) => Promise<any>, TKey> {
+    /**
+     * Wrap the given async operation to prepare for caching
+     * @param operation - The async function to run via getResult
+     * @param computeKey - How to compute the cache key for a given execution of getResult
+     * @param cache - The cache to store the Promises returned by the async function
+     */
+    constructor(
+        private readonly operation: (...params: Parameters<TOperation>) => Promise<AwaitedReturnType<TOperation>>,
         private readonly computeKey: (...params: Parameters<TOperation>) => TKey,
-        private readonly cache: Map<TKey, Promise<ReturnType<TOperation>>>,
+        private readonly cache: Map<TKey, Promise<AwaitedReturnType<TOperation>>> = new Map(),
     ) {
 
     }
 
-    async getResult(...params: Parameters<TOperation>
-    ): Promise<ReturnType<TOperation>> {  // Should be Promise<Awaited<ReturnType<TOperation>>>
+    // OR: getResult(...params: Parameters<TOperation>): ReturnType<TOperation> AND CAST return VALUE
+    async getResult(...params: Parameters<TOperation>): Promise<AwaitedReturnType<TOperation>> {
         // NOTE: Do not await the Promise returned by asyncFn!
         // Let the caller do so once we return or after a subsequent call to get
         const key = this.computeKey(...params);
         let promise = this.cache.get(key);
         if (promise === undefined) {
-            // Wrap in an async lambda in case asyncFn disabled @typescript-eslint/promise-function-async
-            //* const safeAsyncFn = async () => this.operation(...params);
+            // Wrap in an async lambda to ensure errors thrown from this.operation reject the cached promise
+            // (in case the operation disabled @typescript-eslint/promise-function-async)
+            const safeAsyncFn = async () => this.operation(...params);
 
             // Start the async work and put the Promise in the cache
-            promise = this.operation(...params);
+            promise = safeAsyncFn();
             this.cache.set(key, promise);
 
-            // If asyncFn throws, we may remove the Promise from the cache
+            // If the operation throws, we may remove the Promise from the cache
             promise.catch((error) => {
                 // *if (this.removeOnError(error)) {
-                    this.remove(key);
+                    this.removeCacheEntry(key);
                 // }
             });
         }
@@ -113,7 +191,7 @@ class AsyncOperationWithCaching<TOperation extends (...args: any[]) => Promise<a
         return promise;
     }
 
-    remove(key: TKey) {
+    removeCacheEntry(key: TKey) {
         this.cache.delete(key);
     }
 }
@@ -122,8 +200,15 @@ async function test() {
     const operation = async (p1: string, p2: number) => { return `${p1}-${p2}`; };
     const ins: Parameters<typeof operation> = ["p1", 2];
     const outs: ReturnType<typeof operation> & Promise<any> = Promise.resolve("answer");
-    const opWithCache = new AsyncOperationWithCaching<typeof operation, string>(operation, (p11, p2) => p11, new Map<string, Promise<Promise<string>>>());
-    const result = opWithCache.getResult("hello", 1);
+    const cache = new MapWithExpiration<string, Promise<string>>({ policy: "sliding", durationMs: 1000});
+
+    //* Kind of awkward to prime the cache
+    cache.set("hello", Promise.resolve("world"));
+    const opWithCache = new AsyncOperationWithCaching<typeof operation, string>(
+        operation,
+        (p11, p2) => p11,
+        cache);
+    const result = await opWithCache.getResult("hello", 1);
 }
 
 /**
