@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 /*!
  * Copyright (c) Microsoft Corporation and contributors. All rights reserved.
  * Licensed under the MIT License.
@@ -76,6 +77,53 @@ class GarbageCollector<TKey> {
             this.schedule(key);
         }
     }
+}
+
+class AsyncOperationWithCaching<TOperation extends (...args: any[]) => Promise<any>, TKey> {
+    constructor(
+        private readonly operation: TOperation, // (...params: Parameters<TOperation>) => Promise<ReturnType<TOperation>>,
+        private readonly computeKey: (...params: Parameters<TOperation>) => TKey,
+        private readonly cache: Map<TKey, Promise<ReturnType<TOperation>>>,
+    ) {
+
+    }
+
+    async getResult(...params: Parameters<TOperation>
+    ): Promise<ReturnType<TOperation>> {  // Should be Promise<Awaited<ReturnType<TOperation>>>
+        // NOTE: Do not await the Promise returned by asyncFn!
+        // Let the caller do so once we return or after a subsequent call to get
+        const key = this.computeKey(...params);
+        let promise = this.cache.get(key);
+        if (promise === undefined) {
+            // Wrap in an async lambda in case asyncFn disabled @typescript-eslint/promise-function-async
+            //* const safeAsyncFn = async () => this.operation(...params);
+
+            // Start the async work and put the Promise in the cache
+            promise = this.operation(...params);
+            this.cache.set(key, promise);
+
+            // If asyncFn throws, we may remove the Promise from the cache
+            promise.catch((error) => {
+                // *if (this.removeOnError(error)) {
+                    this.remove(key);
+                // }
+            });
+        }
+
+        return promise;
+    }
+
+    remove(key: TKey) {
+        this.cache.delete(key);
+    }
+}
+
+async function test() {
+    const operation = async (p1: string, p2: number) => { return `${p1}-${p2}`; };
+    const ins: Parameters<typeof operation> = ["p1", 2];
+    const outs: ReturnType<typeof operation> & Promise<any> = Promise.resolve("answer");
+    const opWithCache = new AsyncOperationWithCaching<typeof operation, string>(operation, (p11, p2) => p11, new Map<string, Promise<Promise<string>>>());
+    const result = opWithCache.getResult("hello", 1);
 }
 
 /**
