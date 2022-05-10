@@ -372,6 +372,16 @@ export class EpochTracker implements IPersistedFileCache {
 export class EpochTrackerWithRedemption extends EpochTracker {
     private readonly treesLatestDeferral = new Deferred<void>();
 
+    constructor(
+        cache: IPersistedCache,
+        fileEntry: IFileEntry,
+        logger: ITelemetryLogger,
+    ) {
+        super(cache, fileEntry, logger);
+        console.log("HELLO");
+        this.treesLatestDeferral.promise.catch(() => console.log("~CONSTRUCTOR~"));
+    }
+
     protected validateEpochFromResponse(
         epochFromResponse: string | undefined,
         fetchType: FetchType,
@@ -428,9 +438,12 @@ export class EpochTrackerWithRedemption extends EpochTracker {
             // Similar, if getVersions failed, we should not do any further storage calls.
             // So treesLatest is the only call that can have parallel joinSession request.
             if (fetchType === "treesLatest") {
+                console.log("REJECT");
+                this.treesLatestDeferral.promise.catch(() => console.log("~fetchAndParseAsJSON1~"));
                 this.treesLatestDeferral.reject(error);
+                this.treesLatestDeferral.promise.catch(() => console.log("~fetchAndParseAsJSON2~"));
             }
-            if (fetchType !== "joinSession" || completed) {
+            if (fetchType !== "joinSession" || error.statusCode < 401 || error.statusCode > 404 || completed) {
                 console.log("THROW");
                 throw error;
             }

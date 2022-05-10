@@ -55,8 +55,8 @@ describe.only("Tests for Epoch Tracker With Redemption", () => {
                 resolvedUrl,
             },
             new TelemetryUTLogger());
-        epochCallback = new DeferralWithCallback();
-        (epochTracker as any).treesLatestDeferral = epochCallback;
+        // epochCallback = new DeferralWithCallback();
+        // (epochTracker as any).treesLatestDeferral = epochCallback;
     });
 
     afterEach(async () => {
@@ -82,24 +82,25 @@ describe.only("Tests for Epoch Tracker With Redemption", () => {
     });
 
     it.only("unhandled rejection test", async () => {
-        const resolvedUrl = ({ siteUrl, driveId, itemId, odspResolvedUrl: true } as any) as IOdspResolvedUrl;
-        epochTracker = new EpochTrackerWithRedemption(
-            new LocalPersistentCache(),
-            {
-                docId: hashedDocumentId,
-                resolvedUrl,
-            },
-            new TelemetryUTLogger());
+        // const resolvedUrl = ({ siteUrl, driveId, itemId, odspResolvedUrl: true } as any) as IOdspResolvedUrl;
+        // epochTracker = new EpochTrackerWithRedemption(
+        //     new LocalPersistentCache(),
+        //     {
+        //         docId: hashedDocumentId,
+        //         resolvedUrl,
+        //     },
+        //     new TelemetryUTLogger());
 
         const treesLatestP = epochTracker.fetchAndParseAsJSON("garbage", {}, "treesLatest");
         await assert.rejects(treesLatestP, "(treesLatest) invalid URL, right?");
 
         console.log("IN THE TEST");
 
-        const joinSessionP = epochTracker.fetchAndParseAsJSON("garbage", {}, "joinSession");
-        // deslint-disable-next-line @typescript-eslint/no-floating-promises
-        // p.then(() => console.log("then"));
-        await assert.rejects(joinSessionP, "invalid URL, right?");
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        // Promise.reject(new Error("rejected")).catch(console.log).finally(() => console.log("finally"));
+
+        // const joinSessionP = epochTracker.fetchAndParseAsJSON("garbage", {}, "joinSession");
+        // await assert.rejects(joinSessionP, "invalid URL, right?");
     });
 
     it("joinSession call should succeed on retrying after any network call to the file succeeds", async () => {
