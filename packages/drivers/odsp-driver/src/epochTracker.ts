@@ -430,9 +430,11 @@ export class EpochTrackerWithRedemption extends EpochTracker {
             if (fetchType === "treesLatest") {
                 this.treesLatestDeferral.reject(error);
             }
-            if (fetchType !== "joinSession" || error.statusCode < 401 || error.statusCode > 404 || completed) {
+            if (fetchType !== "joinSession" || completed) {
+                console.log("THROW");
                 throw error;
             }
+            console.log("FALL THROUGH");
         }
 
         // It is joinSession failing with 401..404 error
@@ -453,10 +455,16 @@ export class EpochTrackerWithRedemption extends EpochTracker {
                 const timeoutP = new Promise<number>((resolve) => {
                     timer = setTimeout(() => { resolve(timeoutRes); }, 15000);
                 });
+                console.log("HERE");
                 const res = await Promise.race([
                     timeoutP,
                     // cancel timeout to unblock UTs (otherwise Node process does not exit for 15 sec)
-                    this.treesLatestDeferral.promise.finally(() => clearTimeout(timer))]);
+                    this.treesLatestDeferral.promise
+//                        .catch(() => { console.log("CATCH"); })
+                        .finally(() => {
+                            console.log("FINALLY");
+                            clearTimeout(timer);
+                        })]);
                 if (res === timeoutRes) {
                     event.cancel();
                 }

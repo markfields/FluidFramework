@@ -261,6 +261,7 @@
                 // "<test case name>",
                 "--no-timeouts",
                 "--exit",
+                "--node-option -n unhandled-rejections=strict"
             ],
             "cwd": "${fileDirname}",
             "skipFiles": [

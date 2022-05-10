@@ -34,7 +34,7 @@ class DeferralWithCallback extends Deferred<void> {
     }
 }
 
-describe("Tests for Epoch Tracker With Redemption", () => {
+describe.only("Tests for Epoch Tracker With Redemption", () => {
     const siteUrl = "https://microsoft.sharepoint-df.com/siteUrl";
     const driveId = "driveId";
     const itemId = "itemId";
@@ -79,6 +79,27 @@ describe("Tests for Epoch Tracker With Redemption", () => {
             async () => epochTracker.fetchAndParseAsJSON("fetchUrl", {}, "joinSession"),
             [notFound, async () => okResponse({ "x-fluid-epoch": "epoch1" }, {})],
         );
+    });
+
+    it.only("unhandled rejection test", async () => {
+        const resolvedUrl = ({ siteUrl, driveId, itemId, odspResolvedUrl: true } as any) as IOdspResolvedUrl;
+        epochTracker = new EpochTrackerWithRedemption(
+            new LocalPersistentCache(),
+            {
+                docId: hashedDocumentId,
+                resolvedUrl,
+            },
+            new TelemetryUTLogger());
+
+        const treesLatestP = epochTracker.fetchAndParseAsJSON("garbage", {}, "treesLatest");
+        await assert.rejects(treesLatestP, "(treesLatest) invalid URL, right?");
+
+        console.log("IN THE TEST");
+
+        const joinSessionP = epochTracker.fetchAndParseAsJSON("garbage", {}, "joinSession");
+        // deslint-disable-next-line @typescript-eslint/no-floating-promises
+        // p.then(() => console.log("then"));
+        await assert.rejects(joinSessionP, "invalid URL, right?");
     });
 
     it("joinSession call should succeed on retrying after any network call to the file succeeds", async () => {

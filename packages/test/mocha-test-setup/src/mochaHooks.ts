@@ -55,9 +55,9 @@ export const mochaHooks = {
     beforeEach() {
         // Suppress console.log if not verbose mode
         if (process.env.FLUID_TEST_VERBOSE === undefined) {
-            console.log = () => { };
-            console.error = () => { };
-            console.warn = () => { };
+            // console.log = () => { };
+            // console.error = () => { };
+            // console.warn = () => { };
         }
         // save the test name can and clear the previous logger (if afterEach didn't get ran and it got left behind)
         const context = this as any as Context;
