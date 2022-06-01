@@ -400,7 +400,7 @@ export class GarbageCollector implements IGarbageCollector {
             }
 
             // For new documents, GC has to be explicitly enabled via the flags in GC options.
-            this.gcEnabled = gcOptions.gcAllowed === true;
+            this.gcEnabled = true; //* gcOptions.gcAllowed === true;
             this.sweepEnabled = gcOptions.sweepAllowed === true;
 
             // Set the Session Expiry only if the flag is enabled or the test option is set.

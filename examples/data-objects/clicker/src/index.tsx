@@ -13,6 +13,8 @@ import { IEvent } from "@fluidframework/common-definitions";
 import { IFluidHandle } from "@fluidframework/core-interfaces";
 import { SharedCounter } from "@fluidframework/counter";
 import React from "react";
+// eslint-disable-next-line max-len
+// import { IGCStats } from "../../../../packages/framework/aqueduct/node_modules/@fluidframework/container-runtime/dist";
 import { ClickerAgent } from "./agent";
 
 export const ClickerName = "Clicker";
@@ -55,6 +57,12 @@ export class Clicker extends DataObject<{ Events: IClickerEvents; }> {
 
     public increment() {
         this.counter.increment(1);
+
+        (this.context.containerRuntime as any).garbageCollector.shouldRunGC = true;
+        // Run GC
+        (this.context.containerRuntime as any as { collectGarbage: (options: any) => Promise<any>; })
+            .collectGarbage({})
+            .then(console.log, console.log);
     }
 
     public get value() {
