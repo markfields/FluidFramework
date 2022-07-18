@@ -276,6 +276,7 @@ export class DataStores implements IDisposable {
 
         const context = this.contexts.get(aliasMessage.internalId);
         if (context === undefined) {
+            //* Swept
             this.logger.sendErrorEvent({
                 eventName: "AliasFluidDataStoreNotFound",
                 fluidDataStoreId: aliasMessage.internalId,
@@ -549,6 +550,7 @@ export class DataStores implements IDisposable {
     public async updateStateBeforeGC(): Promise<void> {
         for (const id of this.dataStoresSinceLastGC) {
             const context = this.contexts.get(id);
+            //* Swept
             assert(context !== undefined, 0x2b6 /* Missing data store context */);
             if (await context.isRoot()) {
                 // A root data store is basically a reference from the container runtime to the data store.
