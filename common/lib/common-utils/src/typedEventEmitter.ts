@@ -70,77 +70,51 @@ export class TypedEventEmitter<TEvent>
     readonly off: TypedEventTransform<this, TEvent>;
 }
 
-// Allow keyof TSig extends string | number since keyof any extending Record<string, any> is string | number (surprise!)
-
-type SignatureKeys<TSig> =
-    keyof TSig extends string | number ?
-        TSig[keyof TSig] extends any[] ?
-            keyof TSig
-: never : never;
-
-type SignatureArgs<TSig, TEvent extends SignatureKeys<TSig> = SignatureKeys<TSig>> =
-    keyof TSig extends string | number ?
-        TSig[TEvent] extends any[] ?
-            TSig[TEvent]
-: never : never;
-
-export interface IEvents<TSig> {
-    <TEvent extends SignatureKeys<TSig>>(event: TEvent, listener: (...args: SignatureArgs<TSig, TEvent>) => void);
+export interface IEvents<TSig extends Record<string, any[]>> {
+    <TEvent extends keyof TSig>(event: TEvent, listener: (...args: TSig[TEvent]) => void);
 }
 
 // Dropped extending TypedEventEmitter because I don't know how to incorporate the TypedEventTransform stuff
-class TypedEventEmitter2<TSignatures> extends EventEmitter {
-    emit<TEvent extends SignatureKeys<TSignatures>>(
+class TypedEventEmitter2<TSignatures extends Record<string | number, any[]>> extends EventEmitter {
+    emit<TEvent extends keyof TSignatures>(
         event: TEvent,
-        ...args: SignatureArgs<TSignatures, TEvent>
+        ...args: TSignatures[TEvent]
     ) {
         // Would want to incorporate this class directly in TypedEventEmitter rather than subclassing and calling super.emit
-        return super.emit(event, ...args);
+
+        // This is trouble, I think. Looks like Node and the Polyfill only both handle strings. So numbers and symbols will result in ???
+        // We can't avoid numbers (because if you have a string index signature you also get a number index signature, by some quirk).
+        const eventForBase = event as EventEmitterEventType;
+        return super.emit(eventForBase, ...args);
     }
 
-    on<TEvent extends SignatureKeys<TSignatures>>(
+    on<TEvent extends keyof TSignatures>(
         event: TEvent,
-        listener: (...args: SignatureArgs<TSignatures, TEvent>) => void,
+        listener: (...args: TSignatures[TEvent]) => void,
     ) {
         // Would want to incorporate this class directly in TypedEventEmitter rather than subclassing and calling super.on
-        // Have to cast to Listener because it's expecting something that can take ...args: any[].  Alternative is to constrain Signatures to extend Record<string, any[]> and support arbitrary events
-        return super.on(event, listener as Listener);
+
+        // This is trouble, I think. Looks like Node and the Polyfill only both handle strings. So numbers and symbols will result in ???
+        // We can't avoid numbers (because if you have a string index signature you also get a number index signature, by some quirk).
+        const eventForBase = event as EventEmitterEventType;
+        const listenerForBase = listener as Listener; // We know emit will only be called with the right args. So while we have to cast, it will be ok in the end.
+        return super.on(eventForBase, listenerForBase);
     }
 }
 
-export interface ISampleEventSignatures extends Record<string, any[]> {
+export interface ISampleEventSignatures extends Record<string | number | symbol, any[]> {
     foo: [x: number, y: string];
     bar: [];
     baz: [options: { a: string; b: boolean; }];
-//    [key: string]: any[];
-//    45: number;
+    45: [number];
+    [Symbol.hasInstance]: [number, string];
+// These are blocked because of the any[] in base type
+//    notAnArray: boolean;
+//    999: boolean;
+//    [Symbol.iterator]: number;
+// This is allowed because the base type doesn't speak to types of symbol key'd properties. It could be used, but may crash if underlying EventEmitter doesn't support Symbol event names
 }
 const sample = new TypedEventEmitter2<ISampleEventSignatures>();
-
-type SignatureKeys2<TSig> =
-    keyof TSig extends string | number ?
-        TSig[keyof TSig] extends any[] ?
-            keyof TSig
-: never : never;
-
-type SignatureArgs2<TSig, TEvent extends SignatureKeys2<TSig> = SignatureKeys2<TSig>> =
-    keyof TSig extends string | number ?
-        TSig[TEvent] extends any[] ?
-            TSig[TEvent]
-: never : never;
-
-
-type SK = SignatureKeys2<ISampleEventSignatures>;
-type SA = SignatureArgs2<ISampleEventSignatures>;
-
-type StringKey<T> = keyof T extends string ? keyof T : never;
-type IK = StringKey<{ [key: string]: any; }>;
-type RK = StringKey<Record<string, any>>;
-
-type IKey = keyof { [key: string]: any; };
-type RKey = keyof ERecord;
-
-interface ERecord extends Record<string, any> {}
 
 // These are strongly typed (assuming you spell the type parameter correctly)
 sample.emit("foo", 3, "asdf");
@@ -151,3 +125,7 @@ sample.emit("baz", { a: "hello", b: true });
 sample.emit("unspecified", 123);
 
 sample.on("foo", (x: number, y: string) => {});
+
+sample.emit(4, 4);
+sample.emit(Symbol.iterator, 123);
+
