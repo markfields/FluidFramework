@@ -934,6 +934,12 @@ export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents>
      */
     private nextSummaryNumber: number;
 
+    //* Or make this private and pass to GC Params as a callback
+    public requestMainContainerClose(e: ICriticalContainerError) {
+        assert(this.summarizer !== undefined, "Assumed this was a summarizer container");
+        this.summarizer.requestMainContainerClose(e);
+    }
+
     private constructor(
         private readonly context: IContainerContext,
         private readonly registry: IFluidDataStoreRegistry,
@@ -1173,6 +1179,7 @@ export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents>
                         initialDelayMs: this.initialSummarizerDelayMs,
                     },
                     this.heuristicsDisabled,
+                    this.closeFn,
                 );
                 this.summaryManager.start();
             }

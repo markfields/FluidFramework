@@ -7,6 +7,7 @@ import { IDisposable, IEvent, IEventProvider, ITelemetryLogger } from "@fluidfra
 import { assert } from "@fluidframework/common-utils";
 import { ChildLogger, PerformanceEvent } from "@fluidframework/telemetry-utils";
 import { DriverErrorType } from "@fluidframework/driver-definitions";
+import { ICriticalContainerError } from "@fluidframework/container-definitions";
 import { ISummarizerClientElection } from "./summarizerClientElection";
 import { IThrottler } from "./throttler";
 import {
@@ -98,6 +99,7 @@ export class SummaryManager implements IDisposable {
             opsToBypassInitialDelay = defaultOpsToBypassInitialDelay,
         }: Readonly<Partial<ISummaryManagerConfig>> = {},
         private readonly disableHeuristics?: boolean,
+        private readonly closeFn?: (err?: ICriticalContainerError) => void,
     ) {
         this.logger = ChildLogger.create(
             parentLogger,
@@ -216,6 +218,7 @@ export class SummaryManager implements IDisposable {
 
             const summarizer = await this.requestSummarizerFn();
             this.summarizer = summarizer;
+            summarizer.on("requestMainContainerClose", (e) => { this.closeFn?.(e); });
 
             // Re-validate that it need to be running. Due to asynchrony, it may be not the case anymore
             // If we can't run the LastSummary, simply return as to avoid paying the cost of launching

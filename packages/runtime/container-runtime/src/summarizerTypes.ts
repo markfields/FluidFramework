@@ -13,7 +13,7 @@ import { ITelemetryLoggerPropertyBag } from "@fluidframework/telemetry-utils";
 import {
     IFluidLoadable,
 } from "@fluidframework/core-interfaces";
-import { ContainerWarning, IDeltaManager } from "@fluidframework/container-definitions";
+import { ContainerWarning, ICriticalContainerError, IDeltaManager } from "@fluidframework/container-definitions";
 import {
     ISequencedDocumentMessage,
     ISummaryTree,
@@ -303,6 +303,7 @@ export interface ISummarizerEvents extends IEvent {
      * An event indicating that the Summarizer is having problems summarizing
      */
     (event: "summarizingError", listener: (error: ISummarizingWarning) => void);
+    (event: "requestMainContainerClose", listener: (error: ICriticalContainerError) => void);
 }
 
 export interface ISummarizer extends

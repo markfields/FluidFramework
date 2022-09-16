@@ -6,7 +6,7 @@
 import { EventEmitter } from "events";
 import { Deferred } from "@fluidframework/common-utils";
 import { ITelemetryLogger } from "@fluidframework/common-definitions";
-import { ILoader, LoaderHeader } from "@fluidframework/container-definitions";
+import { ICriticalContainerError, ILoader, LoaderHeader } from "@fluidframework/container-definitions";
 import { UsageError } from "@fluidframework/container-utils";
 import { DriverErrorType, DriverHeader } from "@fluidframework/driver-definitions";
 import { requestFluidObject } from "@fluidframework/runtime-utils";
@@ -80,6 +80,10 @@ export class Summarizer extends EventEmitter implements ISummarizer {
 
     public get handle(): IFluidHandle<this> { return this.innerHandle; }
     private readonly stopDeferred = new Deferred<SummarizerStopReason>();
+
+    public requestMainContainerClose(e: ICriticalContainerError) {
+        this.emit("requestMainContainerClose", e);
+    }
 
     constructor(
         url: string,

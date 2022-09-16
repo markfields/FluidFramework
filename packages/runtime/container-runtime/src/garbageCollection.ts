@@ -77,6 +77,8 @@ export const disableSessionExpiryKey = "Fluid.GarbageCollection.DisableSessionEx
 export const trackGCStateKey = "Fluid.GarbageCollection.TrackGCState";
 // Feature gate key to turn GC sweep log off.
 export const disableSweepLogKey = "Fluid.GarbageCollection.DisableSweepLog";
+// Feature gate key to enable closing the container with AccessViolationError if SweepReady objects are used.
+export const accessViolationOnSweepReadyUsageKey = "Fluid.GarbageCollection.Dogfood.AccessViolationDetection";
 
 // One day in milliseconds.
 export const oneDayMs = 1 * 24 * 60 * 60 * 1000;
@@ -135,6 +137,9 @@ export interface IGarbageCollectionRuntime {
     getNodeType(nodePath: string): GCNodeType;
     /** Called when the runtime should close because of an error. */
     closeFn: (error?: ICriticalContainerError) => void;
+
+    //* Write this comment
+    requestMainContainerClose(error: ICriticalContainerError): void;
 }
 
 /** Defines the contract for the garbage collector. */
@@ -1456,6 +1461,8 @@ export class GarbageCollector implements IGarbageCollector {
             if ((usageType === "Revived") === active) {
                 const pkg = await this.getNodePackagePath(eventProps.id);
                 const fromPkg = eventProps.fromId ? await this.getNodePackagePath(eventProps.fromId) : undefined;
+                //* The plan: In here tell parent container to close if state is SweepReady
+                this.runtime.requestMainContainerClose({ errorType: "accessViolationError", message: "hello" });
                 logger.sendErrorEvent({
                     ...propsToLog,
                     eventName: `${state}Object_${usageType}`,

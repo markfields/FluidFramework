@@ -108,6 +108,7 @@ describe("Garbage Collection Tests", () => {
             getNodeType,
             getCurrentReferenceTimestampMs: () => Date.now(),
             closeFn,
+            requestMainContainerClose: () => {}, //* Implement this for tests somehow?
         };
 
         return GarbageCollector.create({
