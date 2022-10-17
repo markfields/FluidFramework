@@ -20,6 +20,8 @@ import {
     waitForContainerConnection,
 } from "@fluidframework/test-utils";
 import { describeNoCompat, ITestDataObject, itExpects, TestDataObjectType } from "@fluidframework/test-version-utils";
+// eslint-disable-next-line import/no-internal-modules
+import { oneDayMs } from "@fluidframework/container-runtime/dist/garbageCollection";
 
 /**
  * @param settings - feature flags to set
@@ -48,11 +50,11 @@ describeNoCompat.only("GC SweepReady nodes tests", (getTestObjectProvider) => {
 
     const inactiveTimeoutMs = 2000;
     const sweepTimeoutMs = 4000;
-    const sessionExpiryTimeoutMs = 1000000000;
+    const sessionExpiryTimeoutMs = sweepTimeoutMs - 6 * oneDayMs;
     const defaultSettings = {
-        //* "Fluid.GarbageCollection.RunSessionExpiry": true,
+        "Fluid.GarbageCollection.RunSessionExpiry": true,
         "Fluid.Driver.Odsp.TestOverride.DisableSnapshotCache": true,
-        "Fluid.GarbageCollection.TestOverride.SweepTimeoutMs": sweepTimeoutMs,
+        "Fluid.GarbageCollection.TestOverride.SessionExpiryMs": 1000000000,
     };
     function testContainerConfig(props?: {
         settings?: Record<string, ConfigTypes>;
