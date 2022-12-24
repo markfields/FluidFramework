@@ -145,6 +145,15 @@ type AwaitedReturnType<T extends (...args: any[]) => any> =
     ReturnType<T> extends Promise<infer U>
         ? U
         : never;
+/*
+  type Awaited<T> =
+    T extends null | undefined ? T : // special case for `null | undefined` when not in `--strictNullChecks` mode
+        T extends object & { then(onfulfilled: infer F, ...args: infer _): any } ? // `await` only unwraps object types with a callable `then`. Non-object types are not unwrapped
+            F extends ((value: infer V, ...args: infer _) => any) ? // if the argument to `then` is callable, extracts the first argument
+                Awaited<V> : // recursively unwrap the value
+                never : // the argument to `then` was not callable
+        T; // non-object or non-thenable
+ */
 
 /**
  * A wrapper for an async operation that builds in safe caching of the result of the operation
@@ -191,13 +200,61 @@ class AsyncOperationWithCaching<TOperation extends (...args: any[]) => Promise<a
         return promise;
     }
 
-    removeCacheEntry(key: TKey) {
+    removeCacheEntry(key: TKey): void {
         this.cache.delete(key);
     }
 }
 
-async function test() {
-    const operation = async (p1: string, p2: number) => { return `${p1}-${p2}`; };
+/**
+ * A wrapper for an async operation that builds in safe caching of the result of the operation
+ * to avoid duplicating the async work
+ */
+export function incorporateCache<TOperation extends (...args: any[]) => Promise<any>, TKey>(
+    operation: TOperation,
+    // operation: (...params: Parameters<TOperation>) => Promise<AwaitedReturnType<TOperation>>,
+    computeKey: (...params: Parameters<TOperation>) => TKey,
+    cache: Map<TKey, Promise<AwaitedReturnType<TOperation>>>,
+): TOperation {
+    // NOTE: Do not await the Promise returned by operaion!
+    // Let the caller do so once we return or after a subsequent call to get
+
+    return async function (...params: Parameters<TOperation>) {
+        const key = computeKey(...params);
+        let promise = cache.get(key);
+        if (promise === undefined) {
+            // Wrap in an async lambda to ensure errors thrown from this.operation reject the cached promise
+            // (in case the operation disabled @typescript-eslint/promise-function-async)
+            // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+            const safeAsyncFn = async () => operation(...params);
+
+            // Start the async work and put the Promise in the cache
+            promise = safeAsyncFn();
+            cache.set(key, promise);
+
+            // If the operation throws, we may remove the Promise from the cache
+            promise.catch((error) => {
+                // *if (this.removeOnError(error)) {
+                    cache.delete(key);
+                // }
+            });
+        }
+
+        return promise;
+    } as TOperation;
+}
+
+export async function test2(): Promise<void> {
+    const operation = async (p1: string, p2: number): Promise<string> => { return `${p1}-${p2}`; };
+    const cache = new Map<string, Promise<string>>();
+    const opWithCache = incorporateCache(
+        operation,
+        (p1, p2) => p1,
+        cache);
+    const result = await opWithCache("hello", 123);
+}
+
+export async function test(): Promise<void> {
+    const operation = async (p1: string, p2: number): Promise<string> => { return `${p1}-${p2}`; };
     const ins: Parameters<typeof operation> = ["p1", 2];
     const outs: ReturnType<typeof operation> & Promise<any> = Promise.resolve("answer");
     const cache = new MapWithExpiration<string, Promise<string>>({ policy: "sliding", durationMs: 1000});
