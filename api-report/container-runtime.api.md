@@ -160,7 +160,7 @@ export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents>
     // (undocumented)
     get options(): ILoaderOptions;
     // (undocumented)
-    orderSequentially<T>(callback: () => T): T;
+    orderSequentially(callback: () => void): void;
     // (undocumented)
     process(messageArg: ISequencedDocumentMessage, local: boolean): void;
     // (undocumented)
@@ -289,10 +289,6 @@ export interface IChunkedOp {
     // (undocumented)
     contents: string;
     // (undocumented)
-    originalCompression?: string;
-    // (undocumented)
-    originalMetadata?: Record<string, unknown>;
-    // (undocumented)
     originalType: MessageType | ContainerMessageType;
     // (undocumented)
     totalChunks: number;
@@ -328,10 +324,8 @@ export interface IConnectableRuntime {
 
 // @public
 export interface IContainerRuntimeOptions {
-    readonly chunkSizeInBytes?: number;
     readonly compressionOptions?: ICompressionRuntimeOptions;
     readonly enableOfflineLoad?: boolean;
-    readonly enableOpReentryCheck?: boolean;
     readonly flushMode?: FlushMode;
     // (undocumented)
     readonly gcOptions?: IGCRuntimeOptions;

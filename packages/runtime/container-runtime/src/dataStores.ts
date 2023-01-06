@@ -34,6 +34,7 @@ import {
     create404Response,
     createResponseError,
     responseToException,
+    packagePathToTelemetryProperty,
     SummaryTreeBuilder,
 } from "@fluidframework/runtime-utils";
 import { ChildLogger, loggerToMonitoringContext, LoggingError, MonitoringContext, TelemetryDataTag } from "@fluidframework/telemetry-utils";
@@ -56,7 +57,6 @@ import { IDataStoreAliasMessage, isDataStoreAliasMessage } from "./dataStore";
 import { GCNodeType } from "./garbageCollection";
 import { throwOnTombstoneUsageKey } from "./garbageCollectionConstants";
 import { summarizerClientType } from "./summarizerClientElection";
-import { sendGCTombstoneEvent } from "./garbageCollectionTombstoneUtils";
 
 type PendingAliasResolve = (success: boolean) => void;
 
@@ -442,18 +442,12 @@ export class DataStores implements IDisposable {
             // The requested data store is removed by gc. Create a 404 gc response exception.
             const error = responseToException(createResponseError(404, "Datastore removed by gc", request), request);
             // Note: if a user writes a request to look like it's viaHandle, we will also send this telemetry event
-            const event = {
+            this.mc.logger.sendErrorEvent({
                 eventName: "GC_Tombstone_DataStore_Requested",
                 url: request.url,
+                pkg: packagePathToTelemetryProperty(context.isLoaded ? context.packagePath : undefined),
                 viaHandle,
-            };
-            sendGCTombstoneEvent(
-                this.mc,
-                event,
-                this.runtime.clientDetails.type === summarizerClientType,
-                context.isLoaded ? context.packagePath : undefined,
-                error,
-            );
+            }, error);
             // Always log an error when tombstoned data store is used. However, throw an error only if
             // throwOnTombstoneUsage is set.
             if (this.throwOnTombstoneUsage) {

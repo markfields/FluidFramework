@@ -25,7 +25,6 @@ import {
 import { Throttler, formExponentialFn, IThrottler } from "./throttler";
 import { summarizerClientType } from "./summarizerClientElection";
 import { throwOnTombstoneUsageKey } from "./garbageCollectionConstants";
-import { sendGCTombstoneEvent } from "./garbageCollectionTombstoneUtils";
 
 /**
  * This class represents blob (long string)
@@ -111,11 +110,7 @@ interface PendingBlob {
 
 export interface IPendingBlobs { [id: string]: { blob: string; }; }
 
-export interface IBlobManagerEvents {
-    (event: "noPendingBlobs", listener: () => void);
-}
-
-export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
+export class BlobManager {
     public static readonly basePath = "_blobs";
     private static readonly redirectTableBlobName = ".redirectTable";
     private readonly mc: MonitoringContext;
@@ -177,7 +172,6 @@ export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
         private readonly runtime: IBlobManagerRuntime,
         stashedBlobs: IPendingBlobs = {},
     ) {
-        super();
         this.mc = loggerToMonitoringContext(ChildLogger.create(this.runtime.logger, "BlobManager"));
         // Read the feature flag that tells whether to throw when a tombstone blob is requested.
         this.throwOnTombstoneUsage =
@@ -206,11 +200,6 @@ export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
 
     public get hasPendingOfflineUploads(): boolean {
         return this.pendingOfflineUploads.length > 0;
-    }
-
-    public get hasPendingBlobs(): boolean {
-        return (this.runtime.attachState !== AttachState.Attached && this.redirectTable.size > 0)
-        || this.pendingBlobs.size > 0;
     }
 
     /**
@@ -272,11 +261,10 @@ export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
         const request = { url: blobId };
         if (this.tombstonedBlobs.has(blobId) ) {
             const error = responseToException(createResponseError(404, "Blob removed by gc", request), request);
-            const event = {
+            this.mc.logger.sendErrorEvent({
                 eventName: "GC_Tombstone_Blob_Requested",
                 url: request.url,
-            };
-            sendGCTombstoneEvent(this.mc, event, this.runtime.clientDetails.type === summarizerClientType, [BlobManager.basePath], error);
+            }, error);
             if (this.throwOnTombstoneUsage) {
                 throw error;
             }
@@ -367,13 +355,6 @@ export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
         );
     }
 
-    private deleteAndEmitsIfEmpty(id: string) {
-        this.pendingBlobs.delete(id);
-        if (!this.hasPendingBlobs) {
-            this.emit("noPendingBlobs");
-        }
-    }
-
     private onUploadResolve(localId: string, response: ICreateBlobResponse) {
         const entry = this.pendingBlobs.get(localId);
         assert(entry?.status === PendingBlobStatus.OnlinePendingUpload ||
@@ -386,7 +367,7 @@ export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
                     // Storage may dedupe blobs and give us an ID we already know
                     // no need to submit BlobAttach op in this case
                     entry.handleP.resolve(this.getBlobHandle(response.id));
-                    this.deleteAndEmitsIfEmpty(localId);
+                    this.pendingBlobs.delete(localId);
                 } else {
                     // Check for still-pending duplicates too; if an op is already in flight we can wait for that one
                     if (!this.opsInFlight.has(response.id)) {
@@ -488,14 +469,14 @@ export class BlobManager extends TypedEventEmitter<IBlobManagerEvents> {
                     // It's possible we transitioned to offline flow while waiting for this op.
                     if (pendingBlobEntry.status === PendingBlobStatus.OnlinePendingOp) {
                         pendingBlobEntry.handleP.resolve(this.getBlobHandle(message.metadata.blobId));
-                        this.deleteAndEmitsIfEmpty(localId);
+                        this.pendingBlobs.delete(localId);
                     }
                 });
             } else {
                 // Each local ID is unique; get the pending blob entry and delete it
                 assert(this.pendingBlobs.get(message.metadata.localId)?.status === PendingBlobStatus.OfflinePendingOp,
                     0x1f8 /* "local BlobAttach op with no pending blob" */);
-                    this.deleteAndEmitsIfEmpty(message.metadata.localId);
+                this.pendingBlobs.delete(message.metadata.localId);
             }
         }
     }

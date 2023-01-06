@@ -62,9 +62,7 @@ export enum FlushMode {
  * locally within the container only or visible globally to all clients.
  */
 export const VisibilityState = {
-    /**
-     * Indicates that the object is not visible. This is the state when an object is first created.
-     */
+    /** Indicates that the object is not visible. This is the state when an object is first created. */
     NotVisible: "NotVisible",
 
     /**
@@ -212,9 +210,7 @@ export interface IContainerRuntimeBase extends
     getAudience(): IAudience;
 }
 
-/**
- * @deprecated Used only in deprecated API bindToContext
- */
+/** @deprecated - Used only in deprecated API bindToContext */
 export enum BindState {
     NotBound = "NotBound",
     Binding = "Binding",
@@ -420,7 +416,7 @@ export interface IFluidDataStoreContext extends
     submitSignal(type: string, content: any): void;
 
     /**
-     * @deprecated To be removed in favor of makeVisible.
+     * @deprecated - To be removed in favor of makeVisible.
      * Register the runtime to the container
      */
     bindToContext(): void;
@@ -445,9 +441,7 @@ export interface IFluidDataStoreContext extends
     getAbsoluteUrl(relativeUrl: string): Promise<string | undefined>;
 
     getCreateChildSummarizerNodeFn(
-        /**
-         * Initial id or path part of this node
-         */
+        /** Initial id or path part of this node */
         id: string,
         /**
          * Information needed to create the node.
