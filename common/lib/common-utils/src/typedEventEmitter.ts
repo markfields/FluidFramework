@@ -218,3 +218,36 @@ sampleOld.emit("something", 54);
 // Notice these are acceptable
 sampleOld.emit("unspecified", () => {});
 sampleOld.on("unspecified", () => {});
+
+
+interface TEE<TEventSpec> {
+    on(event: keyof TEventSpec, listener: (...args: any[]) => void);
+}
+
+interface TEEwithEmit<TEventSpec> extends TEE<TEventSpec> {
+    emit(event: keyof TEventSpec, ...args: any[]);
+}
+
+abstract class HasTEE<TEventSpec> implements TEE<TEventSpec> {
+    readonly on: (event: keyof TEventSpec, listener: (...args: any[]) => void) => void;
+    protected readonly emit: (event: keyof TEventSpec, ...args: any[]) => void;
+    constructor() {
+        const tee = new EventEmitter() as TEEwithEmit<TEventSpec>;
+        this.on = tee.on.bind(tee);
+        this.emit = tee.emit.bind(tee);
+    }
+
+}
+
+class Foo2 extends HasTEE<{ foo: [] }> {
+    constructor() {
+        super();
+    }
+
+    doSomething(): void {
+        this.emit("foo");
+    }
+}
+
+const foo2 = new Foo2();
+foo2.on("foo", console.log);
