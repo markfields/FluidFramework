@@ -3,7 +3,7 @@
  * Licensed under the MIT License.
  */
 
-import { IDocumentStorageService, ISummaryContext } from "@fluidframework/driver-definitions";
+import { IDocumentStorageService, IDocumentStorageServicePolicies, ISummaryContext } from "@fluidframework/driver-definitions";
 import * as api from "@fluidframework/protocol-definitions";
 
 /**
@@ -11,6 +11,9 @@ import * as api from "@fluidframework/protocol-definitions";
  * Does not read/write anything.
  */
 export class NullBlobStorageService implements IDocumentStorageService {
+    policies: IDocumentStorageServicePolicies = {
+        maximumCacheDurationMs: 432_000_000, // 5 days in ms.  Not relevant for this storage service but required to be stated
+    };
     public get repositoryUrl(): string {
         throw new Error("Invalid operation");
     }

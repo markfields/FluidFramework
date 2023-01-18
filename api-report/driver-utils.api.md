@@ -76,7 +76,7 @@ export class BlobAggregationStorage extends SnapshotExtractor implements IDocume
     // (undocumented)
     protected loadedFromSummary: boolean;
     // (undocumented)
-    get policies(): IDocumentStorageServicePolicies | undefined;
+    get policies(): IDocumentStorageServicePolicies;
     // (undocumented)
     readBlob(id: string): Promise<ArrayBufferLike>;
     // (undocumented)
@@ -99,7 +99,7 @@ export class BlobAggregationStorage extends SnapshotExtractor implements IDocume
 export class BlobCacheStorageService extends DocumentStorageServiceProxy {
     constructor(internalStorageService: IDocumentStorageService, blobs: Map<string, ArrayBufferLike>);
     // (undocumented)
-    get policies(): IDocumentStorageServicePolicies | undefined;
+    get policies(): IDocumentStorageServicePolicies;
     // (undocumented)
     readBlob(id: string): Promise<ArrayBufferLike>;
 }
@@ -158,9 +158,9 @@ export class DocumentStorageServiceProxy implements IDocumentStorageService {
     getVersions(versionId: string | null, count: number, scenarioName?: string, fetchSource?: FetchSource): Promise<IVersion[]>;
     // (undocumented)
     protected readonly internalStorageService: IDocumentStorageService;
-    set policies(policies: IDocumentStorageServicePolicies | undefined);
+    set policies(policies: IDocumentStorageServicePolicies);
     // (undocumented)
-    get policies(): IDocumentStorageServicePolicies | undefined;
+    get policies(): IDocumentStorageServicePolicies;
     // (undocumented)
     readBlob(blobId: string): Promise<ArrayBufferLike>;
     // (undocumented)
@@ -380,7 +380,7 @@ export class PrefetchDocumentStorageService extends DocumentStorageServiceProxy 
         caching: LoaderCachingPolicy;
         minBlobSize?: number | undefined;
         maximumCacheDurationMs?: 432000000 | undefined;
-    } | undefined;
+    };
     // (undocumented)
     readBlob(blobId: string): Promise<ArrayBufferLike>;
     // (undocumented)

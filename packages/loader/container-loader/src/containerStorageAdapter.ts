@@ -82,7 +82,7 @@ export class ContainerStorageAdapter implements IDocumentStorageService, IDispos
         }
     }
 
-    public get policies(): IDocumentStorageServicePolicies | undefined {
+    public get policies(): IDocumentStorageServicePolicies {
         return this._storageService.policies;
     }
 
@@ -149,7 +149,7 @@ class BlobOnlyStorage implements IDocumentStorageService {
         return this.detachedStorage;
     }
 
-    public get policies(): IDocumentStorageServicePolicies | undefined {
+    public get policies(): IDocumentStorageServicePolicies {
         return this.notCalled();
     }
 

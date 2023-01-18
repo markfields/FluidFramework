@@ -2,6 +2,7 @@
  * Copyright (c) Microsoft Corporation and contributors. All rights reserved.
  * Licensed under the MIT License.
  */
+import { assert } from "@fluidframework/common-utils";
 import { LoaderCachingPolicy } from "@fluidframework/driver-definitions";
 import {
     ISnapshotTree,
@@ -17,9 +18,8 @@ export class PrefetchDocumentStorageService extends DocumentStorageServiceProxy 
 
     public get policies() {
         const policies = this.internalStorageService.policies;
-        if (policies) {
-            return { ...policies, caching: LoaderCachingPolicy.NoCaching };
-        }
+        assert(policies !== undefined, "Storage service policies is always defined in practice");
+        return { ...policies, caching: LoaderCachingPolicy.NoCaching };
     }
 
     public async getSnapshotTree(version?: IVersion): Promise<ISnapshotTree | null> {

@@ -4,7 +4,7 @@
  */
 
 import { assert, bufferToString, stringToBuffer } from "@fluidframework/common-utils";
-import { IDocumentStorageService, ISummaryContext } from "@fluidframework/driver-definitions";
+import { IDocumentStorageService, IDocumentStorageServicePolicies, ISummaryContext } from "@fluidframework/driver-definitions";
 import {
     ICreateBlobResponse,
     ISnapshotTree,
@@ -30,6 +30,10 @@ export class SerializedSnapshotStorage implements IDocumentStorageService {
         private readonly storageGetter: () => IDocumentStorageService,
         private readonly blobs: ISerializedBaseSnapshotBlobs,
     ) { }
+    get policies(): IDocumentStorageServicePolicies {
+        //* Will materialize storageGetter... is this ok?
+        return this.storage.policies;
+    }
 
     public static async serializeTree(
         snapshot: ISnapshotTree,

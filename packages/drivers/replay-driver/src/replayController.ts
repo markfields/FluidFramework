@@ -6,6 +6,7 @@
 import {
     IDocumentService,
     IDocumentStorageService,
+    IDocumentStorageServicePolicies,
     ISummaryContext,
 } from "@fluidframework/driver-definitions";
 import * as api from "@fluidframework/protocol-definitions";
@@ -14,6 +15,9 @@ import * as api from "@fluidframework/protocol-definitions";
  * Partial implementation of IDocumentStorageService
  */
 export abstract class ReadDocumentStorageServiceBase implements IDocumentStorageService {
+    policies: IDocumentStorageServicePolicies = {
+        maximumCacheDurationMs: 432_000_000, // 5 days in ms.  Not relevant for this storage service but required to be stated
+    };
     public abstract getVersions(versionId: string | null, count: number): Promise<api.IVersion[]>;
     public abstract getSnapshotTree(version?: api.IVersion): Promise<api.ISnapshotTree | null>;
     public abstract readBlob(blobId: string): Promise<ArrayBufferLike>;

@@ -17,7 +17,7 @@ export class BlobCacheStorageService extends DocumentStorageServiceProxy {
         super(internalStorageService);
     }
 
-    public get policies(): IDocumentStorageServicePolicies | undefined {
+    public get policies(): IDocumentStorageServicePolicies {
         return this.internalStorageService.policies;
     }
 

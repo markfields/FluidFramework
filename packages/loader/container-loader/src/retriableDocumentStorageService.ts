@@ -29,7 +29,7 @@ export class RetriableDocumentStorageService implements IDocumentStorageService,
     ) {
     }
 
-    public get policies(): IDocumentStorageServicePolicies | undefined {
+    public get policies(): IDocumentStorageServicePolicies {
         return this.internalStorageService.policies;
     }
     public get disposed() { return this._disposed; }

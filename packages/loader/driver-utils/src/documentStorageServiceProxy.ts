@@ -20,7 +20,7 @@ import {
 export class DocumentStorageServiceProxy implements IDocumentStorageService {
     private _policiesOverride: IDocumentStorageServicePolicies | undefined;
 
-    public set policies(policies: IDocumentStorageServicePolicies | undefined) {
+    public set policies(policies: IDocumentStorageServicePolicies) {
         this._policiesOverride = policies;
     }
 

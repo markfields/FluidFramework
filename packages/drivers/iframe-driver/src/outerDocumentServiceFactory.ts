@@ -221,6 +221,9 @@ export class DocumentServiceFactoryProxy implements IDocumentServiceFactoryProxy
 
     private getStorage(storage: IDocumentStorageService): IDocumentStorageService {
         return {
+            policies: {
+                maximumCacheDurationMs: 432_000_000, // 5 days in ms.  Not relevant for this storage service but required to be stated
+            },
             repositoryUrl: "Not Implemented",
             getSnapshotTree: async (version?: IVersion) => {
                 return storage.getSnapshotTree(version);

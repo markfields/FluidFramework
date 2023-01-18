@@ -173,7 +173,7 @@ export interface IDocumentStorageService extends Partial<IDisposable> {
     downloadSummary(handle: ISummaryHandle): Promise<ISummaryTree>;
     getSnapshotTree(version?: IVersion, scenarioName?: string): Promise<ISnapshotTree | null>;
     getVersions(versionId: string | null, count: number, scenarioName?: string, fetchSource?: FetchSource): Promise<IVersion[]>;
-    readonly policies?: IDocumentStorageServicePolicies;
+    readonly policies: IDocumentStorageServicePolicies;
     readBlob(id: string): Promise<ArrayBufferLike>;
     // (undocumented)
     repositoryUrl: string;
