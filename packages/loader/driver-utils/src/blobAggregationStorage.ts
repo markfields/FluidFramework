@@ -187,9 +187,8 @@ export class BlobAggregationStorage extends SnapshotExtractor implements IDocume
 
     public get policies(): IDocumentStorageServicePolicies | undefined {
         const policies = this.storage.policies;
-        if (policies) {
-            return { ...policies, minBlobSize: undefined };
-        }
+        assert(!!policies, "Storage service policies is always defined in practice");
+        return { ...policies, minBlobSize: undefined };
     }
 
     public async unpackSnapshot(snapshot: ISnapshotTree) {

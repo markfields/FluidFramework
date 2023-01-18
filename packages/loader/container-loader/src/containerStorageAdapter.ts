@@ -83,12 +83,7 @@ export class ContainerStorageAdapter implements IDocumentStorageService, IDispos
     }
 
     public get policies(): IDocumentStorageServicePolicies | undefined {
-        // back-compat 0.40 containerRuntime requests policies even in detached container if storage is present
-        // and storage is always present in >=0.41.
-        try {
-            return this._storageService.policies;
-        } catch (e) {}
-        return undefined;
+        return this._storageService.policies;
     }
 
     public get repositoryUrl(): string {
