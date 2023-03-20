@@ -399,14 +399,19 @@ export interface IDocumentServiceFactory {
 export interface ISummaryContext {
 	/**
 	 * Parent summary proposed handle (from summary op)
+	 * This is a pointer for the server to find the just-uploaded summary when processing the summary op
 	 */
 	readonly proposalHandle: string | undefined;
 
 	/**
 	 * Parent summary acked handle (from summary ack)
+	 * This is the "permanent" handle to the ack'd summary for future reference
 	 */
 	readonly ackHandle: string | undefined;
 
+	/**
+	 * refSeqNumber for the current summary
+	 */
 	readonly referenceSequenceNumber: number;
 }
 

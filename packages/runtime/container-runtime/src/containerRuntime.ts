@@ -2581,6 +2581,7 @@ export class ContainerRuntime
 			const message = `Summary @${summaryRefSeqNum}:${this.deltaManager.minimumSequenceNumber}`;
 			const lastAck = this.summaryCollection.latestAck;
 
+			//* Also pass in lastAck's sequence number for all parties to validate against
 			this.summarizerNode.startSummary(summaryRefSeqNum, summaryNumberLogger);
 
 			// Helper function to check whether we should still continue between each async step.
@@ -2692,6 +2693,8 @@ export class ContainerRuntime
 			if (!continueResult.continue) {
 				return { stage: "generate", ...generateSummaryData, error: continueResult.error };
 			}
+
+			//* Make sure to take into account these different cases
 
 			// It may happen that the lastAck it not correct due to missing summaryAck in case of single commit
 			// summary. So if the previous summarizer closes just after submitting the summary and before
