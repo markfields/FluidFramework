@@ -13,6 +13,15 @@ import { OpDecompressor } from "./opDecompressor";
 import { OpGroupingManager } from "./opGroupingManager";
 import { OpSplitter } from "./opSplitter";
 
+export type SequencedDocumentMessage<T = any> = ISequencedDocumentMessage & { contents: T };
+
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface Serialized<T> extends String {}
+
+export function parseJson<T>(s: Serialized<T>) {
+	return JSON.parse(s as string) as T;
+}
+
 export class RemoteMessageProcessor {
 	constructor(
 		private readonly opSplitter: OpSplitter,
@@ -80,18 +89,20 @@ export class RemoteMessageProcessor {
 	}
 }
 
-const copy = (remoteMessage: ISequencedDocumentMessage): ISequencedDocumentMessage => {
+const copy = <T>(
+	remoteMessage: SequencedDocumentMessage<Serialized<T> | any>,
+): SequencedDocumentMessage => {
 	// Do shallow copy of message, as the processing flow will modify it.
 	// There might be multiple container instances receiving same message
 	// We do not need to make deep copy, as each layer will just replace message.content itself,
 	// but would not modify contents details
-	const message = { ...remoteMessage };
+	const message: SequencedDocumentMessage<T> = { ...remoteMessage };
 
 	// back-compat: ADO #1385: eventually should become unconditional, but only for runtime messages!
 	// System message may have no contents, or in some cases (mostly for back-compat) they may have actual objects.
 	// Old ops may contain empty string (I assume noops).
 	if (typeof message.contents === "string" && message.contents !== "") {
-		message.contents = JSON.parse(message.contents);
+		message.contents = parseJson(message.contents as Serialized<T>);
 	}
 
 	return message;
