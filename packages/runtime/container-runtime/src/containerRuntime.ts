@@ -182,6 +182,7 @@ import {
 	RemoteMessageProcessor,
 	OpGroupingManager,
 	getLongStack,
+	IChunkedOp,
 } from "./opLifecycle";
 import { DeltaManagerSummarizerProxy } from "./deltaManagerSummarizerProxy";
 
@@ -212,10 +213,35 @@ export enum ContainerMessageType {
 	IdAllocation = "idAllocation",
 }
 
-export interface ContainerRuntimeMessage {
-	contents: any;
-	type: ContainerMessageType;
-}
+export type ContainerRuntimeMessage =
+	| {
+			type: ContainerMessageType.FluidDataStoreOp;
+			contents: IEnvelope;
+	  }
+	| {
+			type: ContainerMessageType.Attach;
+			contents: IAttachMessage;
+	  }
+	| {
+			type: ContainerMessageType.ChunkedOp;
+			contents: IChunkedOp;
+	  }
+	| {
+			type: ContainerMessageType.BlobAttach;
+			contents: undefined;
+	  }
+	| {
+			type: ContainerMessageType.Rejoin;
+			contents: undefined;
+	  }
+	| {
+			type: ContainerMessageType.Alias;
+			contents: IDataStoreAliasMessage;
+	  }
+	| {
+			type: ContainerMessageType.IdAllocation;
+			contents: IdCreationRange;
+	  };
 
 export type SequencedContainerRuntimeMessage = ISequencedDocumentMessage & ContainerRuntimeMessage;
 
@@ -235,7 +261,7 @@ export function requireContainerRuntimeMessage(
 			return;
 		default: {
 			// Type safety on missing known cases
-			((_: never) => {})(maybeContainerRuntimeMessage.type);
+			((_: never) => {})(maybeContainerRuntimeMessage);
 
 			const error = DataProcessingError.create(
 				// Former assert 0x3ce
@@ -252,6 +278,12 @@ export function requireContainerRuntimeMessage(
 			throw error;
 		}
 	}
+}
+
+function idCreateRangeHasStashedState(
+	range: IdCreationRange,
+): range is IdCreationRange & Partial<IdCreationRangeWithStashedState> {
+	return (range as Partial<IdCreationRangeWithStashedState>).stashedState !== undefined;
 }
 
 export interface ISummaryBaseConfiguration {
@@ -1910,9 +1942,9 @@ export class ContainerRuntime
 		const { type, contents } = this.parseOpContent(op);
 		switch (type) {
 			case ContainerMessageType.FluidDataStoreOp:
-				return this.dataStores.applyStashedOp(contents as IEnvelope);
+				return this.dataStores.applyStashedOp(contents);
 			case ContainerMessageType.Attach:
-				return this.dataStores.applyStashedAttachOp(contents as IAttachMessage);
+				return this.dataStores.applyStashedAttachOp(contents);
 			case ContainerMessageType.IdAllocation:
 				assert(
 					this.idCompressor !== undefined,
@@ -2076,7 +2108,8 @@ export class ContainerRuntime
 				this.updateDocumentDirtyState(false);
 			}
 
-			switch (message.type) {
+			const type = message.type;
+			switch (type) {
 				case ContainerMessageType.Attach:
 					this.dataStores.processAttachMessage(message, local);
 					break;
@@ -2094,7 +2127,7 @@ export class ContainerRuntime
 						this.idCompressor !== undefined,
 						0x67c /* IdCompressor should be defined if enabled */,
 					);
-					this.idCompressor.finalizeCreationRange(message.contents as IdCreationRange);
+					this.idCompressor.finalizeCreationRange(message.contents);
 					break;
 				case ContainerMessageType.ChunkedOp:
 				case ContainerMessageType.Rejoin:
@@ -2102,7 +2135,7 @@ export class ContainerRuntime
 				default:
 					assert(
 						!runtimeMessage,
-						`ContainerRuntimeMessage type should have been validated already [type: ${message.type}]`,
+						`ContainerRuntimeMessage type should have been validated already [type: ${type}]`,
 					);
 			}
 
@@ -2354,7 +2387,7 @@ export class ContainerRuntime
 				return false;
 			}
 		} else if (type === ContainerMessageType.FluidDataStoreOp) {
-			const envelope = contents as IEnvelope;
+			const envelope = contents;
 			if (envelope.address === agentSchedulerId) {
 				return false;
 			}
@@ -3049,8 +3082,7 @@ export class ContainerRuntime
 	}
 
 	public submitDataStoreAliasOp(contents: any, localOpMetadata: unknown): void {
-		const aliasMessage = contents as IDataStoreAliasMessage;
-		if (!isDataStoreAliasMessage(aliasMessage)) {
+		if (!isDataStoreAliasMessage(contents)) {
 			throw new UsageError("malformedDataStoreAliasMessage");
 		}
 
@@ -3305,12 +3337,12 @@ export class ContainerRuntime
 		localOpMetadata: unknown,
 		opMetadata: Record<string, unknown> | undefined,
 	) {
-		const contents = message.contents;
-		switch (message.type) {
+		const type = message.type;
+		switch (type) {
 			case ContainerMessageType.FluidDataStoreOp:
 				// For Operations, call resubmitDataStoreOp which will find the right store
 				// and trigger resubmission on it.
-				this.dataStores.resubmitDataStoreOp(contents, localOpMetadata);
+				this.dataStores.resubmitDataStoreOp(message.contents, localOpMetadata);
 				break;
 			case ContainerMessageType.Attach:
 			case ContainerMessageType.Alias:
@@ -3318,8 +3350,8 @@ export class ContainerRuntime
 				break;
 			case ContainerMessageType.IdAllocation:
 				// Remove the stashedState from the op if it's a stashed op
-				if (contents.stashedState !== undefined) {
-					delete contents.stashedState;
+				if (idCreateRangeHasStashedState(message.contents)) {
+					delete message.contents.stashedState;
 				}
 				this.submit(message, localOpMetadata);
 				break;
@@ -3332,10 +3364,7 @@ export class ContainerRuntime
 				this.submit(message);
 				break;
 			default:
-				unreachableCase(
-					message.type,
-					`Unknown ContainerMessageType [type: ${message.type}]`,
-				);
+				unreachableCase(type, `Unknown ContainerMessageType [type: ${type}]`);
 		}
 	}
 
@@ -3346,7 +3375,7 @@ export class ContainerRuntime
 			case ContainerMessageType.FluidDataStoreOp:
 				// For operations, call rollbackDataStoreOp which will find the right store
 				// and trigger rollback on it.
-				this.dataStores.rollbackDataStoreOp(contents as IEnvelope, localOpMetadata);
+				this.dataStores.rollbackDataStoreOp(contents, localOpMetadata);
 				break;
 			default:
 				throw new Error(`Can't rollback ${type}`);
