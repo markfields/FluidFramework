@@ -322,6 +322,10 @@ export class Outbox {
 	}
 
 	private compressBatch(batch: IBatch, disableGroupedBatching: boolean): IBatch {
+		const maybeGroupedBatch = disableGroupedBatching
+			? batch
+			: this.params.groupingManager.groupBatch(batch);
+
 		if (
 			batch.content.length === 0 ||
 			this.params.config.compressionOptions === undefined ||
@@ -330,12 +334,10 @@ export class Outbox {
 			this.params.submitBatchFn === undefined
 		) {
 			// Nothing to do if the batch is empty or if compression is disabled or not supported, or if we don't need to compress
-			return disableGroupedBatching ? batch : this.params.groupingManager.groupBatch(batch);
+			return maybeGroupedBatch;
 		}
 
-		const compressedBatch = this.params.compressor.compressBatch(
-			disableGroupedBatching ? batch : this.params.groupingManager.groupBatch(batch),
-		);
+		const compressedBatch = this.params.compressor.compressBatch(maybeGroupedBatch);
 
 		if (this.params.splitter.isBatchChunkingEnabled) {
 			return compressedBatch.contentSizeInBytes <= this.params.splitter.chunkSizeInBytes

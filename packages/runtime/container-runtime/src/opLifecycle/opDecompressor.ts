@@ -16,7 +16,7 @@ import { IMessageProcessingResult } from "./definitions";
 /**
  * Compression makes assumptions about the shape of message contents. This interface codifies those assumptions, but does not validate them.
  */
-interface IPackedContentsContents {
+export interface IPackedContentsContents {
 	packedContents: string;
 }
 

@@ -6,14 +6,16 @@
 import { IBatchMessage } from "@fluidframework/container-definitions";
 import { ISequencedDocumentMessage, MessageType } from "@fluidframework/protocol-definitions";
 import { CompressionAlgorithms } from "..";
-import { ContainerMessageType } from "../messageTypes";
+import { ContainerMessageType, JsonString, OutboundContainerRuntimeMessage } from "../messageTypes";
+import { IPackedContentsContents } from "./opDecompressor";
 
 /**
  * Batch message type used internally by the runtime
  */
 export type BatchMessage = IBatchMessage & {
+	contents?: JsonString<OutboundContainerRuntimeMessage> | JsonString<IPackedContentsContents>; //* Move to runtime-definitions
 	localOpMetadata: unknown;
-	type: ContainerMessageType;
+	type: ContainerMessageType | "groupedBatch"; //*
 	referenceSequenceNumber: number;
 	compression?: CompressionAlgorithms;
 };
@@ -56,7 +58,7 @@ export interface IChunkedOp {
 	chunkId: number;
 	totalChunks: number;
 	contents: string;
-	originalType: MessageType | ContainerMessageType;
+	originalType: MessageType | ContainerMessageType | "groupedBatch";
 	originalMetadata?: Record<string, unknown>;
 	originalCompression?: string;
 }

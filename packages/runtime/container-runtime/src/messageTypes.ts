@@ -12,7 +12,18 @@ import {
 	IdCreationRange,
 } from "@fluidframework/runtime-definitions";
 import { IDataStoreAliasMessage } from "./dataStore";
-import { IChunkedOp } from "./opLifecycle";
+import { IChunkedOp, OpGroupingManager } from "./opLifecycle";
+import { IGroupedMessage } from "./opLifecycle/opGroupingManager";
+
+export type JsonString<T> = string & { __brand__: T };
+
+export function ParseJson<T>(json: JsonString<T>): T {
+	return JSON.parse(json) as T;
+}
+
+export function ToJsonString<T>(value: T): JsonString<T> {
+	return JSON.stringify(value) as JsonString<T>;
+}
 
 export enum ContainerMessageType {
 	// An op to be delivered to store
@@ -39,6 +50,9 @@ export enum ContainerMessageType {
 	 * See the [IdCompressor README](./id-compressor/README.md) for more details.
 	 */
 	IdAllocation = "idAllocation",
+
+	//* Reconcile this throughout - why wasn't it added before?  You can't create one but it can be transmitted.
+	// GroupedBatch = "groupedBatch",
 }
 
 /**
@@ -76,7 +90,7 @@ export interface IContainerRuntimeMessageCompatDetails {
  * This way stringified values can be compared.
  */
 export interface TypedContainerRuntimeMessage<
-	TType extends ContainerMessageType | UnknownContainerMessageType,
+	TType extends ContainerMessageType | UnknownContainerMessageType | "groupedBatch", //* reconcile this outlier
 	TContents,
 > {
 	/** Type of the op, within the ContainerRuntime's domain */
@@ -86,6 +100,11 @@ export interface TypedContainerRuntimeMessage<
 	/** Info describing how to handle this op in case the type is unrecognized (default: fail to process) */
 	compatDetails?: IContainerRuntimeMessageCompatDetails;
 }
+
+export type ContainerRuntimeGroupedBatchMessage = TypedContainerRuntimeMessage<
+	typeof OpGroupingManager.groupedBatchOp,
+	IGroupedMessage[]
+>;
 
 export type ContainerRuntimeDataStoreOpMessage = TypedContainerRuntimeMessage<
 	ContainerMessageType.FluidDataStoreOp,
@@ -138,6 +157,7 @@ export type InboundContainerRuntimeMessage =
 	| ContainerRuntimeBlobAttachMessage
 	| ContainerRuntimeRejoinMessage
 	| ContainerRuntimeAliasMessage
+	| ContainerRuntimeGroupedBatchMessage
 	| InTransitContainerRuntimeIdAllocationMessage
 	// Inbound messages may include unknown types from other clients, so we include that as a special case here
 	| UnknownContainerRuntimeMessage;
@@ -162,6 +182,7 @@ export type OutboundContainerRuntimeMessage =
 	| ContainerRuntimeBlobAttachMessage
 	| ContainerRuntimeRejoinMessage
 	| ContainerRuntimeAliasMessage
+	| ContainerRuntimeGroupedBatchMessage
 	| InTransitContainerRuntimeIdAllocationMessage;
 
 /**

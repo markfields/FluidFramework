@@ -191,6 +191,7 @@ import {
 	LocalContainerRuntimeIdAllocationMessage,
 	LocalContainerRuntimeMessage,
 	OutboundContainerRuntimeMessage,
+	ToJsonString,
 	UnknownContainerMessageType,
 } from "./messageTypes";
 
@@ -2225,6 +2226,7 @@ export class ContainerRuntime
 				break;
 			case ContainerMessageType.ChunkedOp:
 			case ContainerMessageType.Rejoin:
+			case "groupedBatch": //* Deal with this throughout
 				break;
 			default: {
 				// If we didn't necessarily expect a runtime message type, then no worries - just return
@@ -3372,7 +3374,7 @@ export class ContainerRuntime
 					contents: idRange,
 				};
 				idAllocationBatchMessage = {
-					contents: JSON.stringify(idAllocationMessage),
+					contents: ToJsonString(idAllocationMessage),
 					referenceSequenceNumber: this.deltaManager.lastSequenceNumber,
 					metadata: undefined,
 					localOpMetadata: this.idCompressor?.serialize(true),
@@ -3400,7 +3402,7 @@ export class ContainerRuntime
 			0x132 /* "sending ops in detached container" */,
 		);
 
-		const serializedContent = JSON.stringify(containerRuntimeMessage);
+		const serializedContent = ToJsonString(containerRuntimeMessage);
 
 		// Note that the real (non-proxy) delta manager is used here to get the readonly info. This is because
 		// container runtime's ability to submit ops depend on the actual readonly state of the delta manager.

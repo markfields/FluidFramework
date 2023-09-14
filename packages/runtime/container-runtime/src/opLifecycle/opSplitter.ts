@@ -12,7 +12,11 @@ import { assert } from "@fluidframework/core-utils";
 import { IBatchMessage } from "@fluidframework/container-definitions";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
 import { ITelemetryBaseLogger } from "@fluidframework/core-interfaces";
-import { ContainerMessageType, ContainerRuntimeChunkedOpMessage } from "../messageTypes";
+import {
+	ContainerMessageType,
+	ContainerRuntimeChunkedOpMessage,
+	ToJsonString,
+} from "../messageTypes";
 import { estimateSocketSize } from "./batchManager";
 import { BatchMessage, IBatch, IChunkedOp, IMessageProcessingResult } from "./definitions";
 
@@ -215,7 +219,7 @@ const chunkToBatchMessage = (
 		contents: chunk,
 	};
 	return {
-		contents: JSON.stringify(payload),
+		contents: ToJsonString(payload),
 		type: payload.type,
 		metadata,
 		localOpMetadata: undefined,

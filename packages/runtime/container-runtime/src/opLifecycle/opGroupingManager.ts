@@ -5,7 +5,7 @@
 
 import { assert } from "@fluidframework/core-utils";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
-import { ContainerMessageType } from "../messageTypes";
+import { ContainerMessageType, ToJsonString } from "../messageTypes";
 import { IBatch } from "./definitions";
 
 /**
@@ -16,7 +16,7 @@ interface IGroupedBatchMessageContents {
 	contents: IGroupedMessage[];
 }
 
-interface IGroupedMessage {
+export interface IGroupedMessage {
 	contents?: unknown;
 	metadata?: Record<string, unknown>;
 	compression?: string;
@@ -29,7 +29,7 @@ function isGroupContents(
 }
 
 export class OpGroupingManager {
-	static readonly groupedBatchOp = "groupedBatch";
+	public static readonly groupedBatchOp = "groupedBatch" as const;
 
 	constructor(private readonly groupedBatchingEnabled: boolean) {}
 
@@ -49,7 +49,7 @@ export class OpGroupingManager {
 			}
 		}
 
-		const serializedContent = JSON.stringify({
+		const serializedContent = ToJsonString({
 			type: OpGroupingManager.groupedBatchOp,
 			contents: batch.content.map<IGroupedMessage>((message) => ({
 				contents: message.contents === undefined ? undefined : JSON.parse(message.contents),
@@ -78,14 +78,15 @@ export class OpGroupingManager {
 			return [op];
 		}
 
-		const messages = op.contents.contents;
+		const messages: IGroupedMessage[] = op.contents.contents;
 		let fakeCsn = 1;
-		return messages.map((subMessage) => ({
+		//* I think we can do better than unknown for contents.  Where/What is type?
+		return messages.map(({ contents, metadata, compression }) => ({
 			...op,
+			contents,
+			metadata,
+			compression,
 			clientSequenceNumber: fakeCsn++,
-			contents: subMessage.contents,
-			metadata: subMessage.metadata,
-			compression: subMessage.compression,
 		}));
 	}
 }

@@ -249,7 +249,7 @@ export class PendingStateManager implements IDisposable {
 	public processPendingLocalMessage(
 		message: ISequencedDocumentMessage &
 			TypedContainerRuntimeMessage<
-				ContainerMessageType | UnknownContainerMessageType,
+				ContainerMessageType | UnknownContainerMessageType | "groupedBatch",
 				unknown
 			>,
 	): unknown {

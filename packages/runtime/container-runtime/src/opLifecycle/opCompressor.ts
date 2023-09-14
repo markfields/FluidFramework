@@ -9,6 +9,7 @@ import { IsoBuffer } from "@fluid-internal/client-utils";
 import { compress } from "lz4js";
 import { ITelemetryBaseLogger } from "@fluidframework/core-interfaces";
 import { CompressionAlgorithms } from "../containerRuntime";
+import { ToJsonString } from "../messageTypes";
 import { estimateSocketSize } from "./batchManager";
 import { IBatch, BatchMessage } from "./definitions";
 
@@ -39,7 +40,7 @@ export class OpCompressor {
 		const messages: BatchMessage[] = [];
 		messages.push({
 			...batch.content[0],
-			contents: JSON.stringify({ packedContents: compressedContent }),
+			contents: ToJsonString({ packedContents: compressedContent }),
 			metadata: batch.content[0].metadata,
 			compression: CompressionAlgorithms.lz4,
 		});

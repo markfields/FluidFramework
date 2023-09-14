@@ -331,7 +331,7 @@ export interface IChunkedOp {
     // (undocumented)
     originalMetadata?: Record<string, unknown>;
     // (undocumented)
-    originalType: MessageType | ContainerMessageType;
+    originalType: MessageType | ContainerMessageType | "groupedBatch";
     // (undocumented)
     totalChunks: number;
 }
