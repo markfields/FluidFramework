@@ -16,4 +16,4 @@ export { OpCompressor } from "./opCompressor";
 export { OpDecompressor } from "./opDecompressor";
 export { OpSplitter, splitOp } from "./opSplitter";
 export { RemoteMessageProcessor, unpackRuntimeMessage } from "./remoteMessageProcessor";
-export { OpGroupingManager } from "./opGroupingManager";
+export { OpGroupingManager, IGroupedMessage } from "./opGroupingManager";

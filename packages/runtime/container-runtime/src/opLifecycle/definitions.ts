@@ -13,9 +13,9 @@ import { IPackedContentsContents } from "./opDecompressor";
  * Batch message type used internally by the runtime
  */
 export type BatchMessage = IBatchMessage & {
-	contents?: JsonString<OutboundContainerRuntimeMessage> | JsonString<IPackedContentsContents>; //* Move to runtime-definitions
+	contents?: JsonString<OutboundContainerRuntimeMessage | IPackedContentsContents>; //* Move to runtime-definitions
 	localOpMetadata: unknown;
-	type: ContainerMessageType | "groupedBatch"; //*
+	type: OutboundContainerRuntimeMessage["type"];
 	referenceSequenceNumber: number;
 	compression?: CompressionAlgorithms;
 };

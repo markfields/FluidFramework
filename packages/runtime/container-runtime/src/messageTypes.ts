@@ -12,8 +12,7 @@ import {
 	IdCreationRange,
 } from "@fluidframework/runtime-definitions";
 import { IDataStoreAliasMessage } from "./dataStore";
-import { IChunkedOp, OpGroupingManager } from "./opLifecycle";
-import { IGroupedMessage } from "./opLifecycle/opGroupingManager";
+import { IChunkedOp, OpGroupingManager, IGroupedMessage } from "./opLifecycle";
 
 export type JsonString<T> = string & { __brand__: T };
 

@@ -5,8 +5,15 @@
 
 import { assert } from "@fluidframework/core-utils";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
-import { ContainerMessageType, ToJsonString } from "../messageTypes";
+import {
+	ContainerMessageType,
+	ContainerRuntimeGroupedBatchMessage,
+	OutboundContainerRuntimeMessage,
+	ParseJson,
+	ToJsonString,
+} from "../messageTypes";
 import { IBatch } from "./definitions";
+import { IPackedContentsContents } from "./opDecompressor";
 
 /**
  * Grouping makes assumptions about the shape of message contents. This interface codifies those assumptions, but does not validate them.
@@ -17,7 +24,7 @@ interface IGroupedBatchMessageContents {
 }
 
 export interface IGroupedMessage {
-	contents?: unknown;
+	contents?: OutboundContainerRuntimeMessage | IPackedContentsContents;
 	metadata?: Record<string, unknown>;
 	compression?: string;
 }
@@ -49,10 +56,10 @@ export class OpGroupingManager {
 			}
 		}
 
-		const serializedContent = ToJsonString({
+		const serializedContent = ToJsonString<ContainerRuntimeGroupedBatchMessage>({
 			type: OpGroupingManager.groupedBatchOp,
 			contents: batch.content.map<IGroupedMessage>((message) => ({
-				contents: message.contents === undefined ? undefined : JSON.parse(message.contents),
+				contents: message.contents === undefined ? undefined : ParseJson(message.contents),
 				metadata: message.metadata,
 				compression: message.compression,
 			})),
