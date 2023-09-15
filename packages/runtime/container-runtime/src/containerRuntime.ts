@@ -43,6 +43,7 @@ import {
 	wrapError,
 	ITelemetryLoggerExt,
 	UsageError,
+	logIfFalse,
 } from "@fluidframework/telemetry-utils";
 import {
 	DriverHeader,
@@ -2104,21 +2105,45 @@ export class ContainerRuntime
 		// Whether or not the message appears to be a runtime message from an up-to-date client.
 		// It may be a legacy runtime message (ie already unpacked and ContainerMessageType)
 		// or something different, like a system message.
-		const modernRuntimeMessage = messageArg.type === MessageType.Operation;
+		const isModernRuntimeMessage = messageArg.type === MessageType.Operation;
+
+		// Whether or not the message appears to be a "system" message,
+		// i.e. not originating from within the ContainerRuntime layer
+		const isSystemMessage =
+			!isModernRuntimeMessage && messageArg.type in Object.values(MessageType);
 
 		// Do shallow copy of message, as the processing flow will modify it.
 		const messageCopy = { ...messageArg };
-		for (const message of this.remoteMessageProcessor.process(messageCopy)) {
-			if (modernRuntimeMessage) {
+
+		// "un-virtualize" the incoming message if applicable (inverse of Outbox logic)
+		const preppedMessage = this.remoteMessageProcessor.process(messageCopy);
+		for (const message of preppedMessage) {
+			if (isModernRuntimeMessage) {
 				this.processCore({
 					// This cast is appropriate iff `modernRuntimeMessage` is true
 					message: message as InboundSequencedContainerRuntimeMessage,
 					local,
-					modernRuntimeMessage,
+					modernRuntimeMessage: isModernRuntimeMessage,
 				});
 			} else {
-				this.processCore({ message, local, modernRuntimeMessage });
+				this.processCore({ message, local, modernRuntimeMessage: isModernRuntimeMessage });
 			}
+		}
+
+		// For system messages, we expect the "un-virtualization" to yield a singleton containing the input message
+		if (isSystemMessage) {
+			logIfFalse(
+				preppedMessage.length === 1 && preppedMessage[0] === messageCopy,
+				this.logger,
+				{
+					eventName: "InboundSystemMessageModifiedByContainerRuntime",
+					details: JSON.stringify({
+						arrayLength: preppedMessage.length,
+						firstMessageType: preppedMessage[0]?.type,
+					}),
+					category: "generic",
+				},
+			);
 		}
 	}
 

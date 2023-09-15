@@ -3,6 +3,8 @@
  * Licensed under the MIT License.
  */
 
+/* eslint-disable jsdoc/check-indentation */
+
 import {
 	createChildMonitoringContext,
 	GenericError,
@@ -276,7 +278,7 @@ export class Outbox {
 			return;
 		}
 
-		const processedBatch = this.compressBatch(rawBatch, disableGroupedBatching);
+		const processedBatch = this.virtualizeBatch(rawBatch, disableGroupedBatching);
 		this.sendBatch(processedBatch);
 
 		this.persistBatch(rawBatch.content);
@@ -321,7 +323,17 @@ export class Outbox {
 		return this.params.opReentrancy() && !this.rebasing;
 	}
 
-	private compressBatch(batch: IBatch, disableGroupedBatching: boolean): IBatch {
+	/**
+	 * This implements a virtualization layer over the batch to improve perf and server COGS.
+	 *
+	 * Several optional steps, but the full progression would be:
+	 * 1. Group the batch into a single message containing an array of the other messages as its contents
+	 * 2. Compress the batch into a same-sized batch, mostly empty except the first message contains
+	 *    the concatenated and compressed contents of the whole batch
+	 * 3. Split (aka "chunk") the first message into smaller chunks (only one chunk is left in this batch
+	 *    as a placeholder, the rest are uploaded immediately to be cached on the remote clients)
+	 */
+	private virtualizeBatch(batch: IBatch, disableGroupedBatching: boolean): IBatch {
 		const maybeGroupedBatch = disableGroupedBatching
 			? batch
 			: this.params.groupingManager.groupBatch(batch);
