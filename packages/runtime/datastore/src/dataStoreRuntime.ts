@@ -445,7 +445,8 @@ export class FluidDataStoreRuntime
 			this.dataStoreContext,
 			this.dataStoreContext.storage,
 			this.logger,
-			(content, localOpMetadata) => this.submitChannelOp(id, content, localOpMetadata),
+			(content, /* outboundRoutes, */ localOpMetadata) =>
+				this.submitChannelOp(id, content, localOpMetadata),
 			(address: string) => this.setChannelDirty(address),
 			(srcHandle: IFluidHandle, outboundHandle: IFluidHandle) =>
 				this.addedGCOutboundReference(srcHandle, outboundHandle),
@@ -917,8 +918,12 @@ export class FluidDataStoreRuntime
 		context.makeVisible();
 	}
 
-	private submitChannelOp(address: string, contents: any, localOpMetadata: unknown) {
-		const envelope: IEnvelope = { address, contents };
+	private submitChannelOp(
+		address: string,
+		contents: any,
+		/* outboundRoutes, */ localOpMetadata: unknown,
+	) {
+		const envelope: IEnvelope = { address, contents /* outboundRoutes */ };
 		this.submit(DataStoreMessageType.ChannelOp, envelope, localOpMetadata);
 	}
 

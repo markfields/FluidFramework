@@ -2261,6 +2261,9 @@ export class ContainerRuntime
 			case ContainerMessageType.ChunkedOp:
 			case ContainerMessageType.Rejoin:
 				break;
+			// case "ReferenceOp":
+			// 	// Do stuff - call GC to tell it
+			// 	break;
 			default: {
 				// If we didn't necessarily expect a runtime message type, then no worries - just return
 				// e.g. this case applies to system ops, or legacy ops that would have fallen into the above cases anyway.
@@ -3365,6 +3368,7 @@ export class ContainerRuntime
 		const envelope: IEnvelope = {
 			address: id,
 			contents,
+			/* outboundRoutes (not the other place) */
 		};
 		this.submit(
 			{ type: ContainerMessageType.FluidDataStoreOp, contents: envelope },
@@ -3695,6 +3699,9 @@ export class ContainerRuntime
 				// and trigger rollback on it.
 				this.dataStores.rollbackDataStoreOp(contents as IEnvelope, localOpMetadata);
 				break;
+			// case "ReferenceOp":
+			// 	// GC doesn't keep any local state relative to outbound ReferenceOp.  Having the op removed from the batch is all that's needed.
+			// 	break;
 			default:
 				// Don't check message.compatDetails because this is for rolling back a local op so the type will be known
 				throw new Error(`Can't rollback ${type}`);

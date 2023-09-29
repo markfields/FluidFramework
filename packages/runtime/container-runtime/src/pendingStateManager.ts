@@ -39,6 +39,7 @@ export interface IPendingMessageNew {
 	content: string;
 	localOpMetadata: unknown;
 	opMetadata: Record<string, unknown> | undefined;
+	// outboundRoutes: string[];
 }
 
 /**

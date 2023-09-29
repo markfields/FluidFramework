@@ -397,7 +397,10 @@ export class DataStores implements IDisposable {
 	}
 	public readonly dispose = () => this.disposeOnce.value;
 
-	public resubmitDataStoreOp(envelope: IEnvelope, localOpMetadata: unknown) {
+	public resubmitDataStoreOp(
+		envelope: IEnvelope /* with outboundRoutes */,
+		localOpMetadata: unknown,
+	) {
 		const context = this.contexts.get(envelope.address);
 		assert(!!context, 0x160 /* "There should be a store context for the op" */);
 		context.reSubmit(envelope.contents, localOpMetadata);
@@ -409,7 +412,9 @@ export class DataStores implements IDisposable {
 		context.rollback(envelope.contents, localOpMetadata);
 	}
 
-	public async applyStashedOp(envelope: IEnvelope): Promise<unknown> {
+	public async applyStashedOp(
+		envelope: IEnvelope /* with outboundReferences */,
+	): Promise<unknown> {
 		const context = this.contexts.get(envelope.address);
 		assert(!!context, 0x161 /* "There should be a store context for the op" */);
 		return context.applyStashedOp(envelope.contents);
@@ -426,7 +431,7 @@ export class DataStores implements IDisposable {
 		local: boolean,
 		localMessageMetadata: unknown,
 	) {
-		const envelope = message.contents as IEnvelope;
+		const envelope = message.contents as IEnvelope; /* Also has outboundRoutes */
 		const transformed = { ...message, contents: envelope.contents };
 		this.validateNotDeleted(envelope.address);
 		const context = this.contexts.get(envelope.address);
@@ -437,6 +442,7 @@ export class DataStores implements IDisposable {
 		// being used.
 		this.gcNodeUpdated(
 			`/${envelope.address}`,
+			//* outboundRoutes: foo, bar, baz
 			message.timestamp,
 			context.isLoaded ? context.packagePath : undefined,
 		);
