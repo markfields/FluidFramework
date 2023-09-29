@@ -80,6 +80,16 @@ import {
 import { ContainerRuntime } from "./containerRuntime";
 import { sendGCUnexpectedUsageEvent, throwOnTombstoneUsageKey } from "./gc";
 
+//* Duplicate
+export interface ContainerMessageMetadata {
+	path?: string[];
+	outboundRoutes?: string[];
+}
+
+export interface ChannelMessageMetadata extends ContainerMessageMetadata {
+	localOpMetadata: unknown;
+}
+
 function createAttributes(
 	pkg: readonly string[],
 	isRootDataStore: boolean,
@@ -682,7 +692,7 @@ export abstract class FluidDataStoreContext
 		return runtime.request(request);
 	}
 
-	public submitMessage(type: string, content: any, localOpMetadata: unknown): void {
+	public submitMessage(type: string, content: any, metadata: ChannelMessageMetadata): void {
 		this.verifyNotClosed("submitMessage");
 		assert(!!this.channel, 0x146 /* "Channel must exist when submitting message" */);
 		const fluidDataStoreContent: FluidDataStoreMessage = {
@@ -693,7 +703,7 @@ export abstract class FluidDataStoreContext
 		// Summarizer clients should not submit messages.
 		this.identifyLocalChangeInSummarizer("DataStoreMessageSubmittedInSummarizer", type);
 
-		this._containerRuntime.submitDataStoreOp(this.id, fluidDataStoreContent, localOpMetadata);
+		this._containerRuntime.submitDataStoreOp(this.id, fluidDataStoreContent, metadata);
 	}
 
 	/**

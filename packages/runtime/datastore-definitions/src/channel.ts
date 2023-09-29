@@ -160,20 +160,36 @@ export interface IDeltaHandler {
 	rollback?(message: any, localOpMetadata: unknown): void;
 }
 
+//*
+export type DDS_ID = string;
+export type DDS_OpPath = `/__op/${DDS_ID}`;
+
+export interface ContainerMessageMetadata {
+	path?: string[];
+	outboundRoutes?: string[];
+}
+
+export interface ChannelMessageMetadata extends ContainerMessageMetadata {
+	localOpMetadata: unknown;
+}
+
 /**
- * Interface to represent a connection to a delta notification stream.
+ * Interface to represent a channel's connection to a delta notification stream.
  */
 export interface IDeltaConnection {
 	connected: boolean;
 
 	/**
 	 * Send new messages to the server.
-	 * @param messageContent - The content of the message to be sent.
-	 * @param localOpMetadata - The local metadata associated with the message. This is kept locally by the runtime
+	 * @param channelData - The content of the message to be sent.
+	 * @param metadata - The local metadata associated with the message. This is kept locally by the runtime
 	 * and not sent to the server. It will be provided back when this message is acknowledged by the server. It will
 	 * also be provided back when asked to resubmit the message.
 	 */
-	submit(messageContent: any, localOpMetadata: unknown): void;
+	submit(
+		channelData: any,
+		metadata: ContainerMessageMetadata & { localOpMetadata: unknown },
+	): void;
 
 	/**
 	 * Attaches a message handler to the delta connection

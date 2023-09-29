@@ -17,6 +17,8 @@ export {
 	IChannelStorageService,
 	IDeltaConnection,
 	IDeltaHandler,
+	ChannelMessageMetadata,
+	ContainerMessageMetadata,
 } from "./channel";
 export { IFluidDataStoreRuntime, IFluidDataStoreRuntimeEvents } from "./dataStoreRuntime";
 export { Jsonable } from "./jsonable";

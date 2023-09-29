@@ -193,6 +193,7 @@ import {
 	type OutboundContainerRuntimeMessage,
 	type UnknownContainerRuntimeMessage,
 } from "./messageTypes";
+import { ChannelMessageMetadata } from "./dataStoreContext";
 
 /**
  * Utility to implement compat behaviors given an unknown message type
@@ -3360,19 +3361,18 @@ export class ContainerRuntime
 		}
 	}
 
-	public submitDataStoreOp(
-		id: string,
-		contents: any,
-		localOpMetadata: unknown = undefined,
-	): void {
-		const envelope: IEnvelope = {
+	public submitDataStoreOp(id: string, contents: any, metadata?: ChannelMessageMetadata): void {
+		metadata?.path?.unshift(`__${ContainerMessageType.FluidDataStoreOp}`, id);
+		const envelope: IEnvelope & { outboundRoutes?: string[]; path?: string } = {
 			address: id,
 			contents,
-			/* outboundRoutes (not the other place) */
+			outboundRoutes: metadata?.outboundRoutes,
+			path: metadata?.path?.join("/"),
 		};
+
 		this.submit(
 			{ type: ContainerMessageType.FluidDataStoreOp, contents: envelope },
-			localOpMetadata,
+			metadata?.localOpMetadata,
 		);
 	}
 
@@ -3442,8 +3442,8 @@ export class ContainerRuntime
 		);
 
 		const serializedContent = JSON.stringify(containerRuntimeMessage);
-
 		// Note that the real (non-proxy) delta manager is used here to get the readonly info. This is because
+
 		// container runtime's ability to submit ops depend on the actual readonly state of the delta manager.
 		if (this.innerDeltaManager.readOnlyInfo.readonly) {
 			this.mc.logger.sendTelemetryEvent({

@@ -23,6 +23,7 @@ import {
 	IFluidDataStoreRuntime,
 	IChannelStorageService,
 	IChannelServices,
+	ChannelMessageMetadata,
 } from "@fluidframework/datastore-definitions";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
 import {
@@ -365,11 +366,19 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
 	 * and not sent to the server. This will be sent back when this message is received back from the server. This is
 	 * also sent if we are asked to resubmit the message.
 	 */
-	protected submitLocalMessage(content: any, localOpMetadata: unknown = undefined): void {
+	protected submitLocalMessage(
+		content: any,
+		outboundRoutes: string[], //*
+		localOpMetadata: unknown = undefined,
+	): void {
 		this.verifyNotClosed();
 		if (this.isAttached()) {
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			this.services!.deltaConnection.submit(content, localOpMetadata);
+			this.services!.deltaConnection.submit(content, {
+				path: [this.id],
+				outboundRoutes,
+				localOpMetadata,
+			});
 		}
 	}
 
@@ -400,8 +409,11 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
 	 * @param content - The content of the original message.
 	 * @param localOpMetadata - The local metadata associated with the original message.
 	 */
-	protected reSubmitCore(content: any, localOpMetadata: unknown) {
-		this.submitLocalMessage(content, localOpMetadata);
+	protected reSubmitCore(
+		content: any,
+		{ outboundRoutes = [], localOpMetadata }: ChannelMessageMetadata,
+	) {
+		this.submitLocalMessage(content, outboundRoutes, localOpMetadata);
 	}
 
 	/**
@@ -460,7 +472,7 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
 			setConnectionState: (connected: boolean) => {
 				this.setConnectionState(connected);
 			},
-			reSubmit: (content: any, localOpMetadata: unknown) => {
+			reSubmit: (content: any, localOpMetadata: ChannelMessageMetadata) => {
 				this.reSubmit(content, localOpMetadata);
 			},
 			applyStashedOp: (content: any): unknown => {
@@ -530,7 +542,7 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
 	 * @param content - The content of the original message.
 	 * @param localOpMetadata - The local metadata associated with the original message.
 	 */
-	private reSubmit(content: any, localOpMetadata: unknown) {
+	private reSubmit(content: any, localOpMetadata: ChannelMessageMetadata) {
 		this.reSubmitCore(content, localOpMetadata);
 	}
 

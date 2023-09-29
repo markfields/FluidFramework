@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ChannelMessageMetadata } from '@fluidframework/datastore-definitions/dist/channel';
 import { EventEmitterEventType } from '@fluid-internal/client-utils';
 import { EventEmitterWithErrorHandling } from '@fluidframework/telemetry-utils';
 import { IChannel } from '@fluidframework/datastore-definitions';
@@ -28,18 +29,14 @@ export function createSingleBlobSummary(key: string, content: string | Uint8Arra
 
 // @public
 export class FluidSerializer implements IFluidSerializer {
-    constructor(context: IFluidHandleContext, handleParsedCb: (handle: IFluidHandle) => void);
+    constructor(context: IFluidHandleContext, handleDecodedCb?: (handle: IFluidHandle) => void, handleEncodedCb?: (handle: IFluidHandle) => void);
     decode(input: any): any;
     encode(input: any, bind: IFluidHandle): any;
     // (undocumented)
     get IFluidSerializer(): this;
     // (undocumented)
     parse(input: string): any;
-    // (undocumented)
-    protected serializeHandle(handle: IFluidHandle, bind: IFluidHandle): {
-        type: string;
-        url: string;
-    };
+    protected serializeHandle(handle: IFluidHandle, bind: IFluidHandle): ISerializedHandle;
     // (undocumented)
     stringify(input: any, bind: IFluidHandle): string;
 }
@@ -119,6 +116,7 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
     abstract getGCData(fullGC?: boolean): IGarbageCollectionData;
     readonly handle: IFluidHandle;
     protected handleDecoded(decodedHandle: IFluidHandle): void;
+    protected handleEncoded(handle: IFluidHandle): void;
     // (undocumented)
     id: string;
     // (undocumented)
@@ -134,11 +132,12 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
     protected onConnect(): void;
     protected abstract onDisconnect(): any;
     protected abstract processCore(message: ISequencedDocumentMessage, local: boolean, localOpMetadata: unknown): any;
-    protected reSubmitCore(content: any, localOpMetadata: unknown): void;
+    protected reSubmitCore(content: any, { outboundRoutes, localOpMetadata }: ChannelMessageMetadata): void;
     protected rollback(content: any, localOpMetadata: unknown): void;
     // (undocumented)
     protected runtime: IFluidDataStoreRuntime;
-    protected submitLocalMessage(content: any, localOpMetadata?: unknown): void;
+    protected submitLocalMessage(content: any, outboundRoutes: string[], //*
+    localOpMetadata?: unknown): void;
     // (undocumented)
     abstract summarize(fullTree?: boolean, trackState?: boolean, telemetryContext?: ITelemetryContext): Promise<ISummaryTreeWithStats>;
 }
@@ -148,10 +147,7 @@ export class SummarySerializer extends FluidSerializer {
     // (undocumented)
     getSerializedRoutes(): string[];
     // (undocumented)
-    protected serializeHandle(handle: IFluidHandle, bind: IFluidHandle): {
-        type: string;
-        url: string;
-    };
+    protected serializeHandle(handle: IFluidHandle, bind: IFluidHandle): ISerializedHandle;
 }
 
 // @public

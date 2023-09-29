@@ -31,6 +31,20 @@ import { ITelemetryContext } from '@fluidframework/runtime-definitions';
 import { ITelemetryLogger } from '@fluidframework/core-interfaces';
 
 // @public (undocumented)
+export interface ChannelMessageMetadata extends ContainerMessageMetadata {
+    // (undocumented)
+    localOpMetadata: unknown;
+}
+
+// @public (undocumented)
+export interface ContainerMessageMetadata {
+    // (undocumented)
+    outboundRoutes?: string[];
+    // (undocumented)
+    path?: string[];
+}
+
+// @public (undocumented)
 export interface IChannel extends IFluidLoadable {
     // (undocumented)
     readonly attributes: IChannelAttributes;
@@ -79,7 +93,9 @@ export interface IDeltaConnection {
     // (undocumented)
     connected: boolean;
     dirty(): void;
-    submit(messageContent: any, localOpMetadata: unknown): void;
+    submit(channelData: any, metadata: ContainerMessageMetadata & {
+        localOpMetadata: unknown;
+    }): void;
 }
 
 // @public

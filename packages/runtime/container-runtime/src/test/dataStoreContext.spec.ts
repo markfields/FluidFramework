@@ -435,7 +435,7 @@ describe("Data Store Context Tests", () => {
 				localDataStoreContext.submitMessage(
 					DataStoreMessageType.ChannelOp,
 					"summarizer message",
-					{},
+					{} as any,
 				);
 
 				const expectedEvents = [
@@ -477,7 +477,7 @@ describe("Data Store Context Tests", () => {
 					localDataStoreContext.submitMessage(
 						DataStoreMessageType.ChannelOp,
 						`summarizer message ${i}`,
-						{},
+						{} as any,
 					);
 				}
 				for (const event of mockLogger.events) {

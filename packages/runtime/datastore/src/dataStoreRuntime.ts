@@ -71,6 +71,7 @@ import {
 	IFluidDataStoreRuntime,
 	IFluidDataStoreRuntimeEvents,
 	IChannelFactory,
+	ChannelMessageMetadata,
 } from "@fluidframework/datastore-definitions";
 import { v4 as uuid } from "uuid";
 import { IChannelContext, summarizeChannel } from "./channelContext";
@@ -445,8 +446,7 @@ export class FluidDataStoreRuntime
 			this.dataStoreContext,
 			this.dataStoreContext.storage,
 			this.logger,
-			(content, /* outboundRoutes, */ localOpMetadata) =>
-				this.submitChannelOp(id, content, localOpMetadata),
+			(content, metadata) => this.submitChannelOp(id, content, metadata),
 			(address: string) => this.setChannelDirty(address),
 			(srcHandle: IFluidHandle, outboundHandle: IFluidHandle) =>
 				this.addedGCOutboundReference(srcHandle, outboundHandle),
@@ -864,7 +864,11 @@ export class FluidDataStoreRuntime
 		return summaryBuilder.getSummaryTree();
 	}
 
-	public submitMessage(type: DataStoreMessageType, content: any, localOpMetadata: unknown) {
+	public submitMessage(
+		type: DataStoreMessageType,
+		content: any,
+		localOpMetadata?: ChannelMessageMetadata,
+	) {
 		this.submit(type, content, localOpMetadata);
 	}
 
@@ -918,22 +922,19 @@ export class FluidDataStoreRuntime
 		context.makeVisible();
 	}
 
-	private submitChannelOp(
-		address: string,
-		contents: any,
-		/* outboundRoutes, */ localOpMetadata: unknown,
-	) {
+	private submitChannelOp(address: string, contents: any, metadata: ChannelMessageMetadata) {
 		const envelope: IEnvelope = { address, contents /* outboundRoutes */ };
-		this.submit(DataStoreMessageType.ChannelOp, envelope, localOpMetadata);
+		metadata.path?.unshift(`__${DataStoreMessageType.ChannelOp}`, address);
+		this.submit(DataStoreMessageType.ChannelOp, envelope, metadata);
 	}
 
 	private submit(
 		type: DataStoreMessageType,
 		content: any,
-		localOpMetadata: unknown = undefined,
+		metadata?: ChannelMessageMetadata,
 	): void {
 		this.verifyNotClosed();
-		this.dataStoreContext.submitMessage(type, content, localOpMetadata);
+		this.dataStoreContext.submitMessage(type, content, metadata);
 	}
 
 	/**
@@ -943,7 +944,11 @@ export class FluidDataStoreRuntime
 	 * @param content - The content of the original message.
 	 * @param localOpMetadata - The local metadata associated with the original message.
 	 */
-	public reSubmit(type: DataStoreMessageType, content: any, localOpMetadata: unknown) {
+	public reSubmit(
+		type: DataStoreMessageType,
+		content: any,
+		localOpMetadata?: ChannelMessageMetadata,
+	) {
 		this.verifyNotClosed();
 
 		switch (type) {

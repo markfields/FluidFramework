@@ -10,6 +10,7 @@ import {
 } from "@fluidframework/telemetry-utils";
 import { IFluidHandle } from "@fluidframework/core-interfaces";
 import {
+	ChannelMessageMetadata,
 	IChannel,
 	IChannelAttributes,
 	IChannelFactory,
@@ -75,7 +76,7 @@ export interface ChannelServiceEndpoints {
 
 export function createChannelServiceEndpoints(
 	connected: boolean,
-	submitFn: (content: any, localOpMetadata: unknown) => void,
+	submitFn: (content: any, localOpMetadata: ChannelMessageMetadata) => void,
 	dirtyFn: () => void,
 	addedGCOutboundReferenceFn: (srcHandle: IFluidHandle, outboundHandle: IFluidHandle) => void,
 	storageService: IDocumentStorageService,

@@ -5,7 +5,11 @@
 
 import { assert, LazyPromise } from "@fluidframework/core-utils";
 import { IFluidHandle } from "@fluidframework/core-interfaces";
-import { IChannel, IFluidDataStoreRuntime } from "@fluidframework/datastore-definitions";
+import {
+	ChannelMessageMetadata,
+	IChannel,
+	IFluidDataStoreRuntime,
+} from "@fluidframework/datastore-definitions";
 import { IDocumentStorageService } from "@fluidframework/driver-definitions";
 import { ISequencedDocumentMessage, ISnapshotTree } from "@fluidframework/protocol-definitions";
 import {
@@ -48,7 +52,7 @@ export class RemoteChannelContext implements IChannelContext {
 		runtime: IFluidDataStoreRuntime,
 		dataStoreContext: IFluidDataStoreContext,
 		storageService: IDocumentStorageService,
-		submitFn: (content: any, localOpMetadata: unknown) => void,
+		submitFn: (content: any, localOpMetadata: ChannelMessageMetadata) => void,
 		dirtyFn: (address: string) => void,
 		addedGCOutboundReferenceFn: (srcHandle: IFluidHandle, outboundHandle: IFluidHandle) => void,
 		private readonly id: string,

@@ -172,7 +172,7 @@ describe("Runtime", () => {
 						containerRuntime.submitDataStoreOp(
 							envelope.address,
 							envelope.contents,
-							localOpMetadata,
+							localOpMetadata as any,
 						);
 					},
 				} as DataStores;
@@ -378,7 +378,7 @@ describe("Runtime", () => {
 								containerRuntime.submitDataStoreOp(
 									envelope.address,
 									envelope.contents,
-									localOpMetadata,
+									localOpMetadata as any,
 								);
 							},
 						} as DataStores;

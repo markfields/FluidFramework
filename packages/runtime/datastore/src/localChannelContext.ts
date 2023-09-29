@@ -8,7 +8,11 @@ import cloneDeep from "lodash/cloneDeep";
 import { DataProcessingError, ITelemetryLoggerExt } from "@fluidframework/telemetry-utils";
 import { IDocumentStorageService } from "@fluidframework/driver-definitions";
 import { ISequencedDocumentMessage, ISnapshotTree } from "@fluidframework/protocol-definitions";
-import { IChannel, IFluidDataStoreRuntime } from "@fluidframework/datastore-definitions";
+import {
+	ChannelMessageMetadata,
+	IChannel,
+	IFluidDataStoreRuntime,
+} from "@fluidframework/datastore-definitions";
 import {
 	IFluidDataStoreContext,
 	IGarbageCollectionData,
@@ -176,7 +180,7 @@ export class RehydratedLocalChannelContext extends LocalChannelContextBase {
 		dataStoreContext: IFluidDataStoreContext,
 		storageService: IDocumentStorageService,
 		logger: ITelemetryLoggerExt,
-		submitFn: (content: any, localOpMetadata: unknown) => void,
+		submitFn: (content: any, localOpMetadata: ChannelMessageMetadata) => void,
 		dirtyFn: (address: string) => void,
 		addedGCOutboundReferenceFn: (srcHandle: IFluidHandle, outboundHandle: IFluidHandle) => void,
 		private readonly snapshotTree: ISnapshotTree,
@@ -289,7 +293,7 @@ export class LocalChannelContext extends LocalChannelContextBase {
 		dataStoreContext: IFluidDataStoreContext,
 		storageService: IDocumentStorageService,
 		logger: ITelemetryLoggerExt,
-		submitFn: (content: any, localOpMetadata: unknown) => void,
+		submitFn: (content: any, localOpMetadata: ChannelMessageMetadata) => void,
 		dirtyFn: (address: string) => void,
 		addedGCOutboundReferenceFn: (srcHandle: IFluidHandle, outboundHandle: IFluidHandle) => void,
 	) {

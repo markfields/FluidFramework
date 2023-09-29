@@ -215,8 +215,10 @@ export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents 
     get storage(): IDocumentStorageService;
     // (undocumented)
     submitDataStoreAliasOp(contents: any, localOpMetadata: unknown): void;
+    // Warning: (ae-forgotten-export) The symbol "ChannelMessageMetadata" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    submitDataStoreOp(id: string, contents: any, localOpMetadata?: unknown): void;
+    submitDataStoreOp(id: string, contents: any, metadata?: ChannelMessageMetadata): void;
     // (undocumented)
     submitDataStoreSignal(address: string, type: string, content: any): void;
     submitSignal(type: string, content: any): void;

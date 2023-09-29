@@ -1,5 +1,21 @@
 [
 	{
+		"DESCRIPTION": "DataStore attach op | all the way up",
+		"type": "op",
+		"contents": {
+			"path": "/__attach/821f974f-b73b-44d2-b0a5-6bd2965104b4",
+			"data": [
+				{
+					"snapshot": {
+						"entries": ["ALL THE STUFF"]
+					},
+					"type": "@fluid-example/test-dataStore"
+				}
+			]
+		}
+	},
+	{
+		"DESCRIPTION": "DataStore attach op | data array",
 		"type": "attach",
 		"contents": {
 			"path": "/821f974f-b73b-44d2-b0a5-6bd2965104b4",
@@ -122,11 +138,12 @@
 		}
 	},
 	{
+		"DESCRIPTION": "Channel attach op | Data Array",
 		"type": "component",
 		"contents": {
 			"path": "/default/dds1",
 			"data": [
-				{ "outboundRoutes": ["/821f974f-b73b-44d2-b0a5-6bd2965104b4"] }, // This is new, for GC
+				{ "outboundRoutes": ["/821f974f-b73b-44d2-b0a5-6bd2965104b4"] },
 				{ "type": "op" },
 				{
 					"key": "dataStore",
@@ -139,6 +156,95 @@
 							"url": "/821f974f-b73b-44d2-b0a5-6bd2965104b4"
 						}
 					}
+				}
+			]
+		}
+	},
+	{
+		"DESCRIPTION": "DDS op | All the way up",
+		"type": "op",
+		"contents": {
+			"path": "__component/default/__op/dds1",
+			"outboundRoutes": ["/821f974f-b73b-44d2-b0a5-6bd2965104b4"],
+			"otherRootMetadataTbd": 123,
+			"data": [
+				{
+					"key": "dataStore",
+					"path": "/",
+					"type": "set",
+					"value": {
+						"type": "Plain",
+						"value": {
+							"type": "__fluid_handle__",
+							"url": "/821f974f-b73b-44d2-b0a5-6bd2965104b4"
+						}
+					}
+				}
+			]
+		}
+	},
+	{
+		"type": "component",
+		"contents": {
+			"address": "default",
+			"contents": {
+				"content": {
+					"id": "testChannel1",
+					"snapshot": {
+						"entries": ["ALL THE STUFF"]
+					},
+					"type": "https://graph.microsoft.com/types/map"
+				},
+				"type": "attach"
+			}
+		}
+	},
+	{
+		"DESCRIPTION": "Channel attach op | data array",
+		"type": "component",
+		"contents": {
+			"path": "/default/testChannel1",
+			"data": [
+				{},
+				{ "type": "attach" },
+				{
+					"snapshot": {
+						"entries": ["ALL THE STUFF"]
+					},
+					"type": "https://graph.microsoft.com/types/map"
+				}
+			]
+		}
+	},
+	{
+		"DESCRIPTION": "Channel attach op | Vlad's way with extra path semantics",
+		"type": "component",
+		"contents": {
+			"path": "/default/__attach/testChannel1",
+			"data": [
+				{},
+				{ "type": "attach" },
+				{
+					"id": "testChannel1",
+					"snapshot": {
+						"entries": ["ALL THE STUFF"]
+					},
+					"type": "https://graph.microsoft.com/types/map"
+				}
+			]
+		}
+	},
+	{
+		"DESCRIPTION": "Channel attach op | All the way up",
+		"type": "op",
+		"contents": {
+			"path": "/__component/default/__attach/testChannel1",
+			"data": [
+				{
+					"snapshot": {
+						"entries": ["ALL THE STUFF"]
+					},
+					"type": "https://graph.microsoft.com/types/map"
 				}
 			]
 		}
