@@ -40,7 +40,8 @@ export interface ILocalValue {
 }
 
 /**
- * Converts the provided `localValue` to its serialized form.
+ * Converts the provided `localValue` to its serializable form.
+ * Practically speaking, this means converting any handles to their serializable form.
  *
  * @param localValue - The value to serialize.
  * @param serializer - Data store runtime's serializer.
@@ -83,8 +84,8 @@ export class PlainLocalValue implements ILocalValue {
 	 * {@inheritDoc ILocalValue.makeSerialized}
 	 */
 	public makeSerialized(serializer: IFluidSerializer, bind: IFluidHandle): ISerializedValue {
-		// Stringify to convert to the serialized handle values - and then parse in order to create
-		// a POJO for the op
+		// Stringify to convert to the serialized handle values.
+		// May be parsed via JSON.parse to yield a plain object with handles in serializable form.
 		const value = serializeHandles(this.value, serializer, bind);
 
 		return {
