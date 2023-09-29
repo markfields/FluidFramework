@@ -24,6 +24,7 @@ import {
 
 import {
 	AllowInactiveRequestHeaderKey,
+	// ContainerRuntime,
 	InactiveResponseHeaderKey,
 	RuntimeHeaders,
 } from "../containerRuntime";
@@ -904,6 +905,10 @@ export class GarbageCollector implements IGarbageCollector {
 			throw error;
 		}
 	}
+
+	// public addedOutboundReference1(fromNodePath: string, toNodePath: string) {
+	// 	(this.runtime as ContainerRuntime).submitDataStoreOp;
+	// }
 
 	/**
 	 * Called when an outbound reference is added to a node. This is used to identify all nodes that have been

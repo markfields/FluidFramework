@@ -796,7 +796,10 @@ export class SharedDirectory
 					subdir.processClearMessage(msg, op, local, localOpMetadata);
 				}
 			},
-			submit: (op: IDirectoryClearOperation, localOpMetadata: unknown) => {
+			submit: (
+				op: IDirectoryClearOperation,
+				localOpMetadata: { outboundRoutes: string[]; etc: unknown }, // Put the outboundRoutes in the metadata
+			) => {
 				const subdir = this.getWorkingDirectory(op.path) as SubDirectory | undefined;
 				if (subdir) {
 					subdir.resubmitClearMessage(op, localOpMetadata);

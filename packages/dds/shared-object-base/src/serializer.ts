@@ -63,10 +63,16 @@ export interface IFluidSerializer {
 export class FluidSerializer implements IFluidSerializer {
 	private readonly root: IFluidHandleContext;
 
+	/**
+	 * Create the Serializer
+	 * @param context - The routing context used for relative handle paths
+	 * @param handleDecodedCb - called whenever a handle is decoded/parsed by this serializer.
+	 * @param handleEncodedCb - called whenever a handle is encoded/serialized by this serializer.
+	 */
 	public constructor(
 		private readonly context: IFluidHandleContext,
-		// To be called whenever a handle is parsed by this serializer.
-		private readonly handleParsedCb: (handle: IFluidHandle) => void,
+		private readonly handleDecodedCb: (handle: IFluidHandle) => void = () => {},
+		private readonly handleEncodedCb: (handle: IFluidHandle) => void = () => {},
 	) {
 		this.root = this.context;
 		while (this.root.routeContext !== undefined) {
@@ -115,7 +121,15 @@ export class FluidSerializer implements IFluidSerializer {
 	}
 
 	public stringify(input: any, bind: IFluidHandle) {
-		return JSON.stringify(input, (key, value) => this.encodeValue(value, bind));
+		const handles: IFluidHandle[] = [];
+		const string = JSON.stringify(
+			input,
+			(key, value) => this.encodeValue(value, bind), //* , handles),
+		);
+
+		//* s/b handleS Encoded - actually s/b part of the return value
+		this.handleEncodedCb(handles as any);
+		return string;
 	}
 
 	// Parses the serialized data - context must match the context with which the JSON was stringified
@@ -126,11 +140,18 @@ export class FluidSerializer implements IFluidSerializer {
 	// If the given 'value' is an IFluidHandle, returns the encoded IFluidHandle.
 	// Otherwise returns the original 'value'.  Used by 'encode()' and 'stringify()'.
 	private readonly encodeValue = (value: any, bind: IFluidHandle) => {
+		//* , acc: IFluidHandle[]) => {
 		// Detect if 'value' is an IFluidHandle.
 		const handle = value?.IFluidHandle;
 
-		// If 'value' is an IFluidHandle return its encoded form.
-		return handle !== undefined ? this.serializeHandle(handle, bind) : value;
+		// If 'value' is not an IFluidHandle, return the original value.
+		if (handle === undefined) {
+			return value;
+		}
+
+		//* this.handleEncodedCb(handle);
+		// acc.push(handle);
+		return this.serializeHandle(handle, bind);
 	};
 
 	// If the given 'value' is an encoded IFluidHandle, returns the decoded IFluidHandle.
@@ -145,7 +166,7 @@ export class FluidSerializer implements IFluidSerializer {
 				: generateHandleContextPath(value.url, this.context);
 
 			const parsedHandle = new RemoteFluidObjectHandle(absolutePath, this.root);
-			this.handleParsedCb(parsedHandle);
+			this.handleDecodedCb(parsedHandle);
 			return parsedHandle;
 		} else {
 			return value;
@@ -200,7 +221,13 @@ export class FluidSerializer implements IFluidSerializer {
 		return clone ?? input;
 	}
 
-	protected serializeHandle(handle: IFluidHandle, bind: IFluidHandle) {
+	/**
+	 * Convert the handle to a POJO that can be serialized (Doesn't actually serialize it to a string).
+	 *
+	 * Also acts as a choke point for other functionality to execute when a handle is serialized,
+	 * since that indicates that the object is now referenced by another object.
+	 */
+	protected serializeHandle(handle: IFluidHandle, bind: IFluidHandle): ISerializedHandle {
 		bind.bind(handle);
 		return {
 			type: "__fluid_handle__",

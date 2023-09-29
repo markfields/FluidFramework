@@ -296,13 +296,27 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
 	/**
 	 * Called when a handle is decoded by this object. A handle in the object's data represents an outbound reference
 	 * to another object in the container.
-	 * @param decodedHandle - The handle of the Fluid object that is decoded.
+	 * @param decodedHandle - The handle of the Fluid object that is referenced in this object's data.
 	 */
 	protected handleDecoded(decodedHandle: IFluidHandle) {
 		if (this.isAttached()) {
 			// This represents an outbound reference from this object to the node represented by decodedHandle.
 			this.services?.deltaConnection.addedGCOutboundReference?.(this.handle, decodedHandle);
 		}
+	}
+
+	/**
+	 * Called when a handle is encoded by this object. A handle in the object's data represents an outbound reference
+	 * to another object in the container.
+	 * @param handle - The handle of the Fluid object that is referenced in this object's data.
+	 */
+	protected handleEncoded(handle: IFluidHandle) {
+		//* this.services?.deltaConnection.newThingForOutboundRefsDuringSubmit(...);
+		/**
+		 * Two options here:
+		 * A. Tell GC about this handle and the other handles encoded in the op being prep'd (similar to addedGCOutboundReference above). GC will collect these and send a standalone Reference Op
+		 * B. Collect all the handles encoded in the op being prep'd and include the list alongside the op content. The ContainerRuntime will add that as metadata on the op
+		 */
 	}
 
 	/**
@@ -628,6 +642,7 @@ export abstract class SharedObject<
 		this._serializer = new FluidSerializer(
 			this.runtime.channelsRoutingContext,
 			(handle: IFluidHandle) => this.handleDecoded(handle),
+			(handle: IFluidHandle) => this.handleEncoded(handle),
 		);
 	}
 
