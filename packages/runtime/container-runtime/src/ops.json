@@ -1,0 +1,146 @@
+[
+	{
+		"type": "attach",
+		"contents": {
+			"path": "/821f974f-b73b-44d2-b0a5-6bd2965104b4",
+			"data": [
+				{},
+				{
+					"snapshot": {
+						"entries": ["ALL THE STUFF"]
+					},
+					"type": "@fluid-example/test-dataStore"
+				}
+			]
+		}
+	},
+	{
+		"type": "attach",
+		"contents": {
+			"id": "821f974f-b73b-44d2-b0a5-6bd2965104b4",
+			"snapshot": {
+				"entries": [
+					{
+						"path": ".channels",
+						"value": {
+							"entries": [
+								{
+									"path": "root",
+									"value": {
+										"entries": [
+											{
+												"path": "header",
+												"mode": "100644",
+												"type": "Blob",
+												"value": {
+													"contents": "{\"blobs\":[],\"content\":{\"ci\":{\"csn\":0,\"ccIds\":[]}}}",
+													"encoding": "utf-8"
+												}
+											},
+											{
+												"path": ".attributes",
+												"mode": "100644",
+												"type": "Blob",
+												"value": {
+													"contents": "{\"type\":\"https://graph.microsoft.com/types/directory\",\"snapshotFormatVersion\":\"0.1\",\"packageVersion\":\"2.0.0-internal.6.4.0\"}",
+													"encoding": "utf-8"
+												}
+											}
+										]
+									},
+									"mode": "040000",
+									"type": "Tree"
+								}
+							]
+						},
+						"mode": "040000",
+						"type": "Tree"
+					},
+					{
+						"path": ".component",
+						"mode": "100644",
+						"type": "Blob",
+						"value": {
+							"contents": "{\"pkg\":\"[\\\"@fluid-example/test-dataStore\\\"]\",\"summaryFormatVersion\":2,\"isRootDataStore\":false}",
+							"encoding": "utf-8"
+						}
+					}
+				]
+			},
+			"type": "@fluid-example/test-dataStore"
+		}
+	},
+	{
+		"type": "component",
+		"contents": {
+			"address": "default",
+			"contents": {
+				"content": {
+					"address": "root",
+					"contents": {
+						"key": "dataStore",
+						"path": "/",
+						"type": "set",
+						"value": {
+							"type": "Plain",
+							"value": {
+								"type": "__fluid_handle__",
+								"url": "/821f974f-b73b-44d2-b0a5-6bd2965104b4"
+							}
+						}
+					}
+				},
+				"type": "op"
+			}
+		}
+	},
+	{
+		"type": "component",
+		"contents": {
+			"path": "/default/root",
+			"metadata": {
+				"": {
+					"outboundRoutes": "/821f974f-b73b-44d2-b0a5-6bd2965104b4"
+				},
+				"default": {
+					"type": "op"
+				},
+				"root": {}
+			},
+			"contents": {
+				"key": "dataStore",
+				"path": "/",
+				"type": "set",
+				"value": {
+					"type": "Plain",
+					"value": {
+						"type": "__fluid_handle__",
+						"url": "/821f974f-b73b-44d2-b0a5-6bd2965104b4"
+					}
+				}
+			}
+		}
+	},
+	{
+		"type": "component",
+		"contents": {
+			"path": "/default/dds1",
+			"data": [
+				{ "outboundRoutes": ["/821f974f-b73b-44d2-b0a5-6bd2965104b4"] }, // This is new, for GC
+				{ "type": "op" },
+				{
+					"key": "dataStore",
+					"path": "/",
+					"type": "set",
+					"value": {
+						"type": "Plain",
+						"value": {
+							"type": "__fluid_handle__",
+							"url": "/821f974f-b73b-44d2-b0a5-6bd2965104b4"
+						}
+					}
+				}
+			]
+		}
+	}
+]
