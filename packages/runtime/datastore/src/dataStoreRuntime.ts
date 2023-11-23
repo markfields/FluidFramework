@@ -38,6 +38,7 @@ import {
 	ISummaryBlob,
 	ISummaryTree,
 	IQuorumClients,
+	MessageType,
 } from "@fluidframework/protocol-definitions";
 import {
 	CreateChildSummarizerNodeParam,
@@ -87,7 +88,7 @@ import { FluidObjectHandle } from "./fluidHandle";
 export enum DataStoreMessageType {
 	// Creates a new channel
 	Attach = "attach",
-	ChannelOp = "op",
+	ChannelOp = MessageType.Operation,
 }
 
 /**
