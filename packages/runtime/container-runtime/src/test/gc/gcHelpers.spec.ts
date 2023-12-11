@@ -82,6 +82,11 @@ describe("Garbage Collection Helpers Tests", () => {
 			},
 			{
 				persisted: { tombstoneGeneration: 1 },
+				current: 1,
+				expectedShouldAllowValue: false, // Only 0 is a special value (for matching with tombstoneGeneration)
+			},
+			{
+				persisted: { tombstoneGeneration: 1 },
 				current: 0,
 				expectedShouldAllowValue: false,
 			},

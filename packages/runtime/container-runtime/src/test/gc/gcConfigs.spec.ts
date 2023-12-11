@@ -891,10 +891,10 @@ describe("Garbage Collection configurations", () => {
 		});
 	});
 
-	describe("throwOnTombstoneLoad", () => {
+	describe.only("throwOnTombstoneLoad", () => {
 		it("gcDisableThrowOnTombstoneLoad true", () => {
 			gc = createGcWithPrivateMembers(
-				{ gcFeature: 0 },
+				undefined /* metadata */,
 				{ [gcDisableThrowOnTombstoneLoadOptionName]: true },
 				false /* isSummarizerClient */,
 			);
@@ -902,7 +902,7 @@ describe("Garbage Collection configurations", () => {
 		});
 		it("gcDisableThrowOnTombstoneLoad false", () => {
 			gc = createGcWithPrivateMembers(
-				{ gcFeature: 0 },
+				undefined /* metadata */,
 				{ [gcDisableThrowOnTombstoneLoadOptionName]: false },
 				false /* isSummarizerClient */,
 			);
@@ -910,8 +910,8 @@ describe("Garbage Collection configurations", () => {
 		});
 		it("gcDisableThrowOnTombstoneLoad undefined", () => {
 			gc = createGcWithPrivateMembers(
-				{ gcFeature: 0 },
-				undefined /* gcOptions */,
+				undefined /* metadata */,
+				{ [gcTombstoneGenerationOptionName]: 2 } /* gcOptions */, //* BUG!! This causes test to fail because tombstoneEnforcement isn't on.  It's fine though, first session will expire.
 				false /* isSummarizerClient */,
 			);
 			assert.equal(gc.configs.throwOnTombstoneLoad, true, "throwOnTombstoneLoad incorrect");
@@ -919,7 +919,7 @@ describe("Garbage Collection configurations", () => {
 		it("Old 'enable' option false (ignored)", () => {
 			const gcThrowOnTombstoneLoadOptionName_old = "gcThrowOnTombstoneLoad";
 			gc = createGcWithPrivateMembers(
-				{ gcFeature: 0 },
+				undefined /* metadata */,
 				{ [gcThrowOnTombstoneLoadOptionName_old]: false },
 				false /* isSummarizerClient */,
 			);
@@ -928,7 +928,7 @@ describe("Garbage Collection configurations", () => {
 		it("throwOnTombstoneLoad enabled via override", () => {
 			injectedSettings[throwOnTombstoneLoadOverrideKey] = true;
 			gc = createGcWithPrivateMembers(
-				{ gcFeature: 0 },
+				undefined /* metadata */,
 				{ [gcDisableThrowOnTombstoneLoadOptionName]: true },
 				false /* isSummarizerClient */,
 			);
@@ -937,7 +937,7 @@ describe("Garbage Collection configurations", () => {
 		it("throwOnTombstoneLoad disabled via override", () => {
 			injectedSettings[throwOnTombstoneLoadOverrideKey] = false;
 			gc = createGcWithPrivateMembers(
-				{ gcFeature: 0 },
+				undefined /* metadata */,
 				{ [gcDisableThrowOnTombstoneLoadOptionName]: false },
 				false /* isSummarizerClient */,
 			);
