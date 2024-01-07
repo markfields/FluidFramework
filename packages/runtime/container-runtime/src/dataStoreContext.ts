@@ -1089,7 +1089,9 @@ export class LocalFluidDataStoreContextBase extends FluidDataStoreContext {
 			0x150 /* "pkg should be available in local data store context" */,
 		);
 
-		const summarizeResult = this.channel.getAttachSummary();
+		//* If GC is enabled
+		const gcData = this.channel.getGCData() as unknown as IGarbageCollectionData; //* Replace with synchronous version
+		const summarizeResult = this.channel.getAttachSummary(); //* BOOKMARK
 
 		// Wrap dds summaries in .channels subtree.
 		wrapSummaryInChannelsTree(summarizeResult);
@@ -1097,6 +1099,10 @@ export class LocalFluidDataStoreContextBase extends FluidDataStoreContext {
 		// Add data store's attributes to the summary.
 		const attributes = createAttributes(this.pkg, this.isInMemoryRoot());
 		addBlobToSummary(summarizeResult, dataStoreAttributesBlobName, JSON.stringify(attributes));
+
+		// Add GC Data to summary
+		const gcBlobKey = "FOO"; //*
+		addBlobToSummary(summarizeResult, gcBlobKey, JSON.stringify(gcData));
 
 		// Attach message needs the summary in ITree format. Convert the ISummaryTree into an ITree.
 		const snapshot = convertSummaryTreeToITree(summarizeResult.summary);

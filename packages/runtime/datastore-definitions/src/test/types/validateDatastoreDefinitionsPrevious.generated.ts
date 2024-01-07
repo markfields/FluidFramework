@@ -15,7 +15,7 @@ type TypeOnly<T> = T extends number
 	? number
 	: T extends string
 	? string
-	: T extends boolean | bigint | symbol
+	: T extends boolean | bigint | symbol | ((...args: any[]) => void)
 	? T
 	: {
 			[P in keyof T]: TypeOnly<T[P]>;

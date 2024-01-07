@@ -274,7 +274,7 @@ export abstract class SharedObjectCore<TEvent extends ISharedObjectEvents = ISha
 	/**
 	 * {@inheritDoc @fluidframework/datastore-definitions#(IChannel:interface).getAttachSummary}
 	 */
-	public abstract getAttachSummary(
+	public abstract getAttachSummary( //* BOOKMARK
 		fullTree?: boolean,
 		trackState?: boolean,
 		telemetryContext?: ITelemetryContext,
@@ -633,11 +633,12 @@ export abstract class SharedObject<
 	/**
 	 * {@inheritDoc @fluidframework/datastore-definitions#(IChannel:interface).getAttachSummary}
 	 */
+	//* BOOKMARK
 	public getAttachSummary(
 		fullTree: boolean = false,
 		trackState: boolean = false,
 		telemetryContext?: ITelemetryContext,
-	): ISummaryTreeWithStats {
+	): ISummaryTreeWithStats & { foo?: number } {
 		const result = this.summarizeCore(this.serializer, telemetryContext);
 		this.incrementTelemetryMetric(
 			blobCountPropertyName,
@@ -649,7 +650,7 @@ export abstract class SharedObject<
 			result.stats.totalBlobSize,
 			telemetryContext,
 		);
-		return result;
+		return { ...result, foo: 42 };
 	}
 
 	/**

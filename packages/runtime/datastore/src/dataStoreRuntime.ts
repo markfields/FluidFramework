@@ -482,7 +482,7 @@ export class FluidDataStoreRuntime
 		this.notBoundedChannelContextSet.delete(channel.id);
 		// If our data store is attached, then attach the channel.
 		if (this.isAttached) {
-			this.attachChannel(channel);
+			this.attachChannel(channel); //* BOOKMARK
 			return;
 		}
 
@@ -843,7 +843,9 @@ export class FluidDataStoreRuntime
 			if (!this.notBoundedChannelContextSet.has(contextId)) {
 				let summaryTree: ISummaryTreeWithStats;
 				if (context.isLoaded) {
-					const contextSummary = context.getAttachSummary(telemetryContext);
+					//* Build it up via GCDataBuilder or whatever
+					//* const gcData = context.getGCDataNow();
+					const contextSummary = context.getAttachSummary(telemetryContext); //* BOOKMARK
 					assert(
 						contextSummary.summary.type === SummaryType.Tree,
 						0x180 /* "getAttachSummary should always return a tree" */,
@@ -907,6 +909,7 @@ export class FluidDataStoreRuntime
 			0x2d0 /* "Data store should be globally visible to attach channels." */,
 		);
 
+		//* BOOKMARK
 		const summarizeResult = summarizeChannel(
 			channel,
 			true /* fullTree */,

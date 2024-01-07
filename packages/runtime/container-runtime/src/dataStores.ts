@@ -330,7 +330,7 @@ export class DataStores implements IDisposable {
 		 */
 		if (this.runtime.attachState !== AttachState.Detached) {
 			localContext.emit("attaching");
-			const message = localContext.generateAttachMessage();
+			const message = localContext.generateAttachMessage(); //* BOOKMARK
 
 			this.pendingAttach.set(id, message);
 			this.submitAttachFn(message);
@@ -665,6 +665,11 @@ export class DataStores implements IDisposable {
 		return summaryBuilder.getSummaryTree();
 	}
 
+	/**
+	 * Create a summary. Used when attaching or serializing a detached container.
+	 *
+	 * @param telemetryContext - summary data passed through the layers for telemetry purposes
+	 */
 	public createSummary(telemetryContext?: ITelemetryContext): ISummaryTreeWithStats {
 		const builder = new SummaryTreeBuilder();
 		// Attaching graph of some stores can cause other stores to get bound too.

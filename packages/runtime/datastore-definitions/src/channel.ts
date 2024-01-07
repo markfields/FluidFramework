@@ -62,7 +62,7 @@ export interface IChannel extends IFluidLoadable {
 		fullTree?: boolean,
 		trackState?: boolean,
 		telemetryContext?: ITelemetryContext,
-	): ISummaryTreeWithStats;
+	): ISummaryTreeWithStats & { foo?: number };
 
 	/**
 	 * Generates summary of the channel asynchronously.

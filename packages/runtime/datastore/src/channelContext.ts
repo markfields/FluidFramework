@@ -103,7 +103,7 @@ export function summarizeChannel(
 	trackState: boolean = false,
 	telemetryContext?: ITelemetryContext,
 ): ISummaryTreeWithStats {
-	const summarizeResult = channel.getAttachSummary(fullTree, trackState, telemetryContext);
+	const summarizeResult = channel.getAttachSummary(fullTree, trackState, telemetryContext); //* BOOKMARK
 
 	// Add the channel attributes to the returned result.
 	addBlobToSummary(summarizeResult, attributesBlobKey, JSON.stringify(channel.attributes));

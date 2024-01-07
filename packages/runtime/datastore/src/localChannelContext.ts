@@ -130,6 +130,7 @@ export abstract class LocalChannelContextBase implements IChannelContext {
 			this._channel !== undefined,
 			0x18d /* "Channel should be loaded to take snapshot" */,
 		);
+		//* BOOKMARK
 		return summarizeChannel(
 			this._channel,
 			true /* fullTree */,
@@ -159,6 +160,11 @@ export abstract class LocalChannelContextBase implements IChannelContext {
 	public async getGCData(fullGC: boolean = false): Promise<IGarbageCollectionData> {
 		const channel = await this.getChannel();
 		return channel.getGCData(fullGC);
+	}
+
+	public getGCDataNow(fullGC: boolean = false): IGarbageCollectionData {
+		assert(this._channel !== undefined, "Channel should be loaded to take snapshot");
+		return this._channel.getGCData(fullGC);
 	}
 
 	public updateUsedRoutes(usedRoutes: string[]) {
