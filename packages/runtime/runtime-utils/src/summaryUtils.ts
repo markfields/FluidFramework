@@ -29,7 +29,7 @@ import {
 	IGarbageCollectionData,
 } from "@fluidframework/runtime-definitions";
 import { ISnapshotTreeWithBlobContents } from "@fluidframework/container-definitions";
-import { UsageError } from "@fluidframework/telemetry-utils";
+import { TelemetryEventPropertyTypeExt, UsageError } from "@fluidframework/telemetry-utils";
 
 /**
  * Combines summary stats by adding their totals together.
@@ -380,29 +380,24 @@ export function convertSummaryTreeToITree(summaryTree: ISummaryTree): ITree {
  * @internal
  */
 export class TelemetryContext implements ITelemetryContext {
-	private readonly telemetry = new Map<string, TelemetryEventPropertyType>();
+	private readonly telemetry = new Map<string, TelemetryEventPropertyTypeExt>();
 
 	/**
 	 * {@inheritDoc @fluidframework/runtime-definitions#ITelemetryContext.set}
 	 */
-	set(prefix: string, property: string, value: TelemetryEventPropertyType): void {
+	set(prefix: string, property: string, value: TelemetryEventPropertyTypeExt): void {
 		this.telemetry.set(`${prefix}${property}`, value);
 	}
 
 	/**
-	 * {@inheritDoc @fluidframework/runtime-definitions#ITelemetryContext.append}
+	 * {@inheritDoc @fluidframework/runtime-definitions#ITelemetryContext.push}
 	 */
-	push(prefix: string, property: string, value: TelemetryEventPropertyType[]): void {
+	push(prefix: string, property: string, values: (string | number | boolean)[]): void {
 		const prevValue = this.telemetry.get(`${prefix}${property}`);
-		if (typeof prevValue === "string") {
-			try {
-				const values = JSON.parse(prevValue) as TelemetryEventPropertyType[];
-				values.push(...value);
-				this.telemetry.set(`${prefix}${property}`, JSON.stringify(values));
-				return;
-			} catch (err) {}
+		if (Array.isArray(prevValue)) {
+			prevValue.push(...values);
 		} else if (prevValue === undefined) {
-			this.telemetry.set(`${prefix}${property}`, JSON.stringify(value));
+			this.telemetry.set(`${prefix}${property}`, values);
 			return;
 		}
 		throw new UsageError(
@@ -417,7 +412,7 @@ export class TelemetryContext implements ITelemetryContext {
 	setMultiple(
 		prefix: string,
 		property: string,
-		values: Record<string, TelemetryEventPropertyType>,
+		values: Record<string, TelemetryEventPropertyTypeExt>,
 	): void {
 		// Set the values individually so that they are logged as a flat list along with other properties.
 		for (const key of Object.keys(values)) {
@@ -429,7 +424,26 @@ export class TelemetryContext implements ITelemetryContext {
 	 * {@inheritDoc @fluidframework/runtime-definitions#ITelemetryContext.get}
 	 */
 	get(prefix: string, property: string): TelemetryEventPropertyType {
-		return this.telemetry.get(`${prefix}${property}`);
+		const value: TelemetryEventPropertyTypeExt = this.telemetry.get(`${prefix}${property}`);
+		switch (typeof value) {
+			case "string":
+			case "number":
+			case "boolean":
+			case "undefined": {
+				return value;
+			}
+			case "object": {
+				// We assume this is an array or flat object based on the input types
+				return JSON.stringify(value);
+			}
+			default: {
+				// should never reach this case based on the input types
+				console.error(
+					`convertToBasePropertyType: INVALID PROPERTY (typed as ${typeof value})`,
+				);
+				return `INVALID PROPERTY (typed as ${typeof value})`;
+			}
+		}
 	}
 
 	/**

@@ -20,7 +20,11 @@ import {
 	SharedObject,
 } from "@fluidframework/shared-object-base";
 import { ISummaryTreeWithStats, ITelemetryContext } from "@fluidframework/runtime-definitions";
-import { ObjectStoragePartition, SummaryTreeBuilder } from "@fluidframework/runtime-utils";
+import {
+	ObjectStoragePartition,
+	SummaryTreeBuilder,
+	TelemetryContext,
+} from "@fluidframework/runtime-utils";
 import { IMatrixProducer, IMatrixConsumer, IMatrixReader, IMatrixWriter } from "@tiny-calc/nano";
 import {
 	MergeTreeDeltaType,
@@ -547,7 +551,9 @@ export class SharedMatrix<T = any>
 			serializer.stringify(artifactsToSummarize, this.handle),
 		);
 		if (telemetryContext?.push !== undefined) {
-			telemetryContext.push("fluid:SharedMatrix", "details", [JSON.stringify(props)]);
+			(telemetryContext as TelemetryContext).push("fluid:SharedMatrix", "details", [
+				JSON.stringify(props),
+			]);
 		}
 		return builder.getSummaryTree();
 	}
