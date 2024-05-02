@@ -4,7 +4,11 @@
  */
 
 import { IFluidHandle } from "@fluidframework/core-interfaces";
-import { IFluidSerializer, ValueType, bindHandles } from "@fluidframework/shared-object-base";
+import {
+	IFluidSerializer,
+	ValueType,
+	// bindHandles, //*
+} from "@fluidframework/shared-object-base";
 import { assert, unreachableCase } from "@fluidframework/core-utils";
 import { TypedEventEmitter } from "@fluid-internal/client-utils";
 // eslint-disable-next-line import/no-deprecated
@@ -302,7 +306,7 @@ export class MapKernel {
 			// this is necessary to bind the potential handles in the value
 			// to this DDS, as we do not walk the object normally unless we
 			// are attached
-			bindHandles(localValue.value, this.serializer, this.handle);
+			//* bindHandles(localValue.value, this.serializer, this.handle);
 			return;
 		}
 
