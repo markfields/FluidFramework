@@ -13,7 +13,11 @@ import {
 import { IContainer } from "@fluidframework/container-definitions/internal";
 import { ContainerRuntime } from "@fluidframework/container-runtime/internal";
 import { type FluidObject, IFluidHandle } from "@fluidframework/core-interfaces";
-import type { ISharedMap } from "@fluidframework/map/internal";
+import {
+	SharedMap as NonCompatSharedMap,
+	SharedDirectory,
+	type ISharedMap,
+} from "@fluidframework/map/internal";
 import { responseToException } from "@fluidframework/runtime-utils/internal";
 import {
 	ITestObjectProvider,
@@ -41,6 +45,9 @@ async function resolveHandleWithoutWait(
 	}
 }
 
+//* Switch to false to test directory the same way as map (or set useRoot to true in the test)
+const useMapDds = true;
+
 /**
  * Creates a non-root data object and validates that it is not visible from the root of the container.
  */
@@ -49,6 +56,12 @@ async function createNonRootDataObject(
 ): Promise<ITestDataObject> {
 	const dataStore = await containerRuntime.createDataStore(TestDataObjectType);
 	const dataObject = await getDataStoreEntryPointBackCompat<ITestDataObject>(dataStore);
+
+	const dds = useMapDds
+		? NonCompatSharedMap.create(dataObject._runtime)
+		: SharedDirectory.create(dataObject._runtime);
+	dataObject._root.set("dds", dds.handle);
+
 	// Non-root data stores are not visible (unreachable) from the root unless their handles are stored in a
 	// visible DDS.
 	await assert.rejects(
@@ -75,11 +88,21 @@ async function createRootDataObject(
 	return getDataStoreEntryPointBackCompat<ITestDataObject>(dataStore);
 }
 
+async function getHandleHolder(dataObject: ITestDataObject, useRoot: boolean) {
+	if (useRoot) {
+		return dataObject._root;
+	}
+	return dataObject._root.get<IFluidHandle<ISharedMap>>("dds")?.get();
+}
+
 async function getAndValidateDataObject(
 	fromDataObject: ITestDataObject,
 	key: string,
+	useRoot: boolean = true,
 ): Promise<ITestDataObject> {
-	const dataObjectHandle = fromDataObject._root.get<IFluidHandle<ITestDataObject>>(key);
+	const handleHolder = await getHandleHolder(fromDataObject, useRoot);
+	assert(handleHolder !== undefined, "Handle holder not found");
+	const dataObjectHandle = handleHolder.get<IFluidHandle<ITestDataObject>>(key);
 	assert(dataObjectHandle !== undefined, `Data object handle for key ${key} not found`);
 	const dataObject = await dataObjectHandle.get();
 	const runtime = dataObject._context.containerRuntime as ContainerRuntime;
@@ -119,7 +142,7 @@ async function getAliasedDataStoreBackCompat(
  * new non-root data stores should not become visible (or reachable from root) until their handles are added to a
  * visible DDS.
  */
-describeCompat("New Fluid objects visibility", "FullCompat", (getTestObjectProvider, { dds }) => {
+describeCompat("New Fluid objects visibility", "NoCompat", (getTestObjectProvider, { dds }) => {
 	const { SharedMap } = dds;
 	let provider: ITestObjectProvider;
 	let container1: IContainer;
@@ -147,6 +170,11 @@ describeCompat("New Fluid objects visibility", "FullCompat", (getTestObjectProvi
 
 			dataObject1 = await getContainerEntryPointBackCompat<ITestDataObject>(container1);
 			containerRuntime1 = dataObject1._context.containerRuntime as ContainerRuntime;
+
+			const dds_ = useMapDds
+				? NonCompatSharedMap.create(dataObject1._runtime)
+				: SharedDirectory.create(dataObject1._runtime);
+			dataObject1._root.set("dds", dds_.handle);
 		});
 
 		/**
@@ -191,13 +219,26 @@ describeCompat("New Fluid objects visibility", "FullCompat", (getTestObjectProvi
 		 * Validates that non-root data stores that have other non-root data stores as dependencies are not visible
 		 * until the parent data store is visible. Also, they are visible in remote clients and can send ops.
 		 */
-		it("validates that non-root data store and its dependencies become visible correctly", async function () {
+		//* ONLY
+		//* ONLY
+		//* ONLY
+		//* ONLY
+		//* ONLY
+		it.only("validates that non-root data store and its dependencies become visible correctly", async function () {
+			//* Setting this to true makes sure that the refactoring I did didn't break the test (at first it did)
+			const useRoot = false;
+
 			const dataObject2 = await createNonRootDataObject(containerRuntime1);
 			const dataObject3 = await createNonRootDataObject(containerRuntime1);
 
+			const map2 = await getHandleHolder(dataObject2, useRoot);
+			assert(map2 !== undefined, "map not found in dataObject2");
+			const map3 = await getHandleHolder(dataObject3, useRoot);
+			assert(map3 !== undefined, "map not found in dataObject2");
+
 			// Add the handle of dataObject3 to dataObject2's DDS. Since dataObject2 and its DDS are not visible yet,
 			// dataObject2 should also be not visible (reachable).
-			dataObject2._root.set("dataObject3", dataObject3.handle);
+			map2.set("dataObject3", dataObject3.handle);
 			await assert.rejects(
 				resolveHandleWithoutWait(containerRuntime1, dataObject3._context.id),
 				"Data object 3 must not be visible from root yet",
@@ -205,7 +246,9 @@ describeCompat("New Fluid objects visibility", "FullCompat", (getTestObjectProvi
 
 			// Adding handle of dataObject2 to a visible DDS should make it and dataObject3 visible (reachable)
 			// from the root.
-			dataObject1._root.set("dataObject2", dataObject2.handle);
+			const map1 = await getHandleHolder(dataObject1, useRoot);
+			assert(map1 !== undefined, "map not found in dataObject2");
+			map1.set("dataObject2", dataObject2.handle);
 			await assert.doesNotReject(
 				resolveHandleWithoutWait(containerRuntime1, dataObject2._context.id),
 				"Data object 2 must be visible from root after its handle is added",
@@ -227,20 +270,35 @@ describeCompat("New Fluid objects visibility", "FullCompat", (getTestObjectProvi
 			await provider.ensureSynchronized();
 			const dataObject1C2 =
 				await getContainerEntryPointBackCompat<ITestDataObject>(container2);
-			const dataObject2C2 = await getAndValidateDataObject(dataObject1C2, "dataObject2");
-			const dataObject3C2 = await getAndValidateDataObject(dataObject2C2, "dataObject3");
+			const dataObject2C2 = await getAndValidateDataObject(
+				dataObject1C2,
+				"dataObject2",
+				useRoot,
+			);
+			const dataObject3C2 = await getAndValidateDataObject(
+				dataObject2C2,
+				"dataObject3",
+				useRoot,
+			);
+
+			const map1C2 = await getHandleHolder(dataObject1C2, useRoot);
+			assert(map1C2 !== undefined, "map not found in dataObject2");
+			const map2C2 = await getHandleHolder(dataObject2C2, useRoot);
+			assert(map2C2 !== undefined, "map not found in dataObject2");
+			const map3C2 = await getHandleHolder(dataObject3C2, useRoot);
+			assert(map3C2 !== undefined, "map not found in dataObject2");
 
 			// Send ops for the data stores in both local and remote container and validate that the ops are
 			// successfully processed.
-			dataObject2._root.set("key1", "value1");
-			dataObject2C2._root.set("key2", "value2");
-			dataObject3._root.set("key1", "value1");
-			dataObject3C2._root.set("key2", "value2");
+			map2.set("key1", "value1");
+			map2C2.set("key2", "value2");
+			map3.set("key1", "value1");
+			map3C2.set("key2", "value2");
 			await provider.ensureSynchronized();
-			assert.strictEqual(dataObject2._root.get("key2"), "value2");
-			assert.strictEqual(dataObject2C2._root.get("key1"), "value1");
-			assert.strictEqual(dataObject3._root.get("key2"), "value2");
-			assert.strictEqual(dataObject3C2._root.get("key1"), "value1");
+			assert.strictEqual(map2.get("key2"), "value2");
+			assert.strictEqual(map2C2.get("key1"), "value1");
+			assert.strictEqual(map3.get("key2"), "value2");
+			assert.strictEqual(map3C2.get("key1"), "value1");
 		});
 
 		/**

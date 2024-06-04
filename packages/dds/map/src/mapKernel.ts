@@ -7,7 +7,10 @@ import type { TypedEventEmitter } from "@fluid-internal/client-utils";
 import type { IFluidHandle } from "@fluidframework/core-interfaces";
 import { assert, unreachableCase } from "@fluidframework/core-utils/internal";
 import type { IFluidSerializer } from "@fluidframework/shared-object-base/internal";
-import { ValueType } from "@fluidframework/shared-object-base/internal";
+import {
+	ValueType,
+	//	bindHandles,
+} from "@fluidframework/shared-object-base/internal";
 
 import type { ISharedMapEvents } from "./interfaces.js";
 import type {
@@ -299,6 +302,7 @@ export class MapKernel {
 
 		// If we are not attached, don't submit the op.
 		if (!this.isAttached()) {
+			// bindHandles(localValue.value, this.serializer, this.handle);
 			return;
 		}
 
