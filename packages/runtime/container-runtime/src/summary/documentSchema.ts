@@ -128,9 +128,9 @@ export type IDocumentSchemaCurrent = {
 	refSeq: number;
 
 	runtime: {
-		[P in keyof IDocumentSchemaFeatures]?: IDocumentSchemaFeatures[P] extends boolean
-			? true
-			: IDocumentSchemaFeatures[P];
+		[P in keyof IDocumentSchemaFeatures]: IDocumentSchemaFeatures[P] extends boolean
+			? true | undefined
+			: IDocumentSchemaFeatures[P] | undefined;
 	};
 };
 
@@ -490,6 +490,10 @@ export class DocumentsSchemaController {
 					// If it's a new document, then we define it's legacy-related behaviors.
 					runtime: {
 						explicitSchemaControl: boolToProp(!existing && features.explicitSchemaControl),
+						compressionLz4: undefined,
+						idCompressorMode: undefined,
+						opGroupingEnabled: undefined,
+						disallowedVersions: undefined,
 					},
 				} satisfies IDocumentSchemaCurrent);
 
