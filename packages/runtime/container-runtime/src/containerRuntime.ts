@@ -162,7 +162,7 @@ import {
 	ContainerRuntimeGCMessage,
 	type ContainerRuntimeIdAllocationMessage,
 	type InboundSequencedContainerRuntimeMessage,
-	type InboundSequencedContainerRuntimeMessageOrSystemMessage,
+	type InboundSequencedNonContainerRuntimeMessage,
 	type LocalContainerRuntimeMessage,
 	type OutboundContainerRuntimeMessage,
 	type UnknownContainerRuntimeMessage,
@@ -699,11 +699,11 @@ type MessageWithContext = {
 } & (
 	| {
 			message: InboundSequencedContainerRuntimeMessage;
-			modernRuntimeMessage: true;
+			isRuntimeMessage: true;
 	  }
 	| {
-			message: InboundSequencedContainerRuntimeMessageOrSystemMessage;
-			modernRuntimeMessage: false;
+			message: InboundSequencedNonContainerRuntimeMessage;
+			isRuntimeMessage: false;
 	  }
 );
 
@@ -2615,7 +2615,7 @@ export class ContainerRuntime
 		// Whether or not the message appears to be a runtime message from an up-to-date client.
 		// It may be a legacy runtime message (ie already unpacked and ContainerMessageType)
 		// or something different, like a system message.
-		const modernRuntimeMessage = messageArg.type === MessageType.Operation;
+		const hasModernRuntimeOpEnvelope = messageArg.type === MessageType.Operation;
 
 		const savedOp = (messageArg.metadata as ISavedOpMetadata)?.savedOp;
 
@@ -2633,8 +2633,8 @@ export class ContainerRuntime
 		// but will not modify the contents object (likely it will replace it on the message).
 		const messageCopy = { ...messageArg };
 		// We expect runtime messages to have JSON contents - deserialize it in place.
-		ensureContentsDeserialized(messageCopy, modernRuntimeMessage, logLegacyCase);
-		if (modernRuntimeMessage) {
+		ensureContentsDeserialized(messageCopy, hasModernRuntimeOpEnvelope, logLegacyCase);
+		if (hasModernRuntimeOpEnvelope) {
 			const processResult = this.remoteMessageProcessor.process(messageCopy, logLegacyCase);
 			if (processResult === undefined) {
 				// This means the incoming message is an incomplete part of a message or batch
@@ -2653,19 +2653,31 @@ export class ContainerRuntime
 				const msg: MessageWithContext = {
 					message,
 					local,
-					modernRuntimeMessage,
+					isRuntimeMessage: true,
 					savedOp,
 					localOpMetadata,
 				};
 				this.ensureNoDataModelChanges(() => this.processCore(msg));
 			});
 		} else {
-			const msg: MessageWithContext = {
-				message: messageCopy as InboundSequencedContainerRuntimeMessageOrSystemMessage,
-				local,
-				modernRuntimeMessage,
-				savedOp,
-			};
+			let msg: MessageWithContext;
+			const isRuntimeMessage = messageCopy.type in ContainerMessageType;
+			// eslint-disable-next-line unicorn/prefer-ternary
+			if (isRuntimeMessage) {
+				msg = {
+					message: messageCopy as InboundSequencedContainerRuntimeMessage,
+					local,
+					isRuntimeMessage,
+					savedOp,
+				};
+			} else {
+				msg = {
+					message: messageCopy as InboundSequencedNonContainerRuntimeMessage,
+					local,
+					isRuntimeMessage,
+					savedOp,
+				};
+			}
 			this.ensureNoDataModelChanges(() => this.processCore(msg));
 		}
 	}
@@ -2708,9 +2720,11 @@ export class ContainerRuntime
 				this.updateDocumentDirtyState(false);
 			}
 
-			this.validateAndProcessRuntimeMessage(messageWithContext, localOpMetadata);
+			if (messageWithContext.isRuntimeMessage) {
+				this.validateAndProcessRuntimeMessage(messageWithContext, localOpMetadata);
+			}
 
-			this.emit("op", message, messageWithContext.modernRuntimeMessage);
+			this.emit("op", message, messageWithContext.isRuntimeMessage); //* IMPORTANT - 2nd arg will change for legacy runtime message from false to true
 
 			this.scheduleManager.afterOpProcessing(undefined, message);
 
@@ -2731,27 +2745,27 @@ export class ContainerRuntime
 	 * Throws a DataProcessingError if the message looks like but doesn't conform to a known TypedContainerRuntimeMessage type.
 	 */
 	private validateAndProcessRuntimeMessage(
-		messageWithContext: MessageWithContext,
+		messageWithContext: MessageWithContext & { isRuntimeMessage: true },
 		localOpMetadata: unknown,
 	): void {
 		// TODO: destructure message and modernRuntimeMessage once using typescript 5.2.2+
-		const { local } = messageWithContext;
-		switch (messageWithContext.message.type) {
+		const { local, message, savedOp } = messageWithContext;
+		switch (message.type) {
 			case ContainerMessageType.Attach:
 			case ContainerMessageType.Alias:
 			case ContainerMessageType.FluidDataStoreOp:
-				this.channelCollection.process(messageWithContext.message, local, localOpMetadata);
+				this.channelCollection.process(message, local, localOpMetadata);
 				break;
 			case ContainerMessageType.BlobAttach:
-				this.blobManager.processBlobAttachOp(messageWithContext.message, local);
+				this.blobManager.processBlobAttachOp(message, local);
 				break;
 			case ContainerMessageType.IdAllocation:
 				// Don't re-finalize the range if we're processing a "savedOp" in
 				// stashed ops flow. The compressor is stashed with these ops already processed.
 				// That said, in idCompressorMode === "delayed", we might not serialize ID compressor, and
 				// thus we need to process all the ops.
-				if (!(this.skipSavedCompressorOps && messageWithContext.savedOp === true)) {
-					const range = messageWithContext.message.contents;
+				if (!(this.skipSavedCompressorOps && savedOp === true)) {
+					const range = message.contents;
 					// Some other client turned on the id compressor. If we have not turned it on,
 					// put it in a pending queue and delay finalization.
 					if (this._idCompressor === undefined) {
@@ -2770,11 +2784,7 @@ export class ContainerRuntime
 				}
 				break;
 			case ContainerMessageType.GC:
-				this.garbageCollector.processMessage(
-					messageWithContext.message,
-					messageWithContext.message.timestamp,
-					local,
-				);
+				this.garbageCollector.processMessage(message, message.timestamp, local);
 				break;
 			case ContainerMessageType.ChunkedOp:
 				// From observability POV, we should not exppse the rest of the system (including "op" events on object) to these messages.
@@ -2784,23 +2794,14 @@ export class ContainerRuntime
 				break;
 			case ContainerMessageType.DocumentSchemaChange:
 				this.documentsSchemaController.processDocumentSchemaOp(
-					messageWithContext.message.contents,
-					messageWithContext.local,
-					messageWithContext.message.sequenceNumber,
+					message.contents,
+					local,
+					message.sequenceNumber,
 				);
 				break;
 			default: {
-				// If we didn't necessarily expect a runtime message type, then no worries - just return
-				// e.g. this case applies to system ops, or legacy ops that would have fallen into the above cases anyway.
-				if (!messageWithContext.modernRuntimeMessage) {
-					return;
-				}
-
-				const compatBehavior = messageWithContext.message.compatDetails?.behavior;
-				if (
-					!compatBehaviorAllowsMessageType(messageWithContext.message.type, compatBehavior)
-				) {
-					const { message } = messageWithContext;
+				const compatBehavior = message.compatDetails?.behavior;
+				if (!compatBehaviorAllowsMessageType(message.type, compatBehavior)) {
 					const error = DataProcessingError.create(
 						// Former assert 0x3ce
 						"Runtime message of unknown type",
