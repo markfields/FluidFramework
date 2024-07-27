@@ -761,14 +761,93 @@ function lastMessageFromMetadata(metadata: IContainerRuntimeMetadata | undefined
 		: metadata?.message;
 }
 
+const creIsAbstract = Symbol("DO NOT INSTANTIATE - use loadRuntime");
+
 /**
- * Represents the runtime of the container. Contains helper functions/state of the container.
- * It will define the store level mappings.
+ * @internal
+ */
+export type Patch<T, U> = Omit<T, keyof U> & U;
+
+/**
+ * @internal
+ */
+export type InternalLoadParams = Patch<
+	Parameters<(typeof ContainerRuntimeExtensible)["loadRuntime"]>[0],
+	{
+		//* Always will be ContainerRuntime, because callers will use ContainerRuntimeExtensible.MixinBase
+		containerRuntimeCtor?: typeof ContainerRuntimeExtensible & typeof ContainerRuntime;
+	}
+>;
+
+//* TODO: Rename to ContainerRuntime and the other to ContainerRuntimeInternal
+/**
  * @legacy
  * @alpha
  */
+export class ContainerRuntimeExtensible extends TypedEventEmitter<
+	IContainerRuntimeEvents & ISummarizerEvents
+> {
+	public static get MixinBase(): typeof ContainerRuntimeExtensible {
+		return ContainerRuntime as unknown as typeof ContainerRuntimeExtensible;
+	}
+
+	//* This is the typical entry point for loading our ContainerRuntime (e.g. in instantiateRuntime)
+	public static async loadRuntime(params: {
+		context: IContainerContext;
+		registryEntries: NamedFluidDataStoreRegistryEntries;
+		existing: boolean;
+		runtimeOptions?: IContainerRuntimeOptions;
+		containerScope?: FluidObject;
+		containerRuntimeCtor?: typeof ContainerRuntimeExtensible;
+		/** @deprecated Will be removed once Loader LTS version is "2.0.0-internal.7.0.0". Migrate all usage of IFluidRouter to the "entryPoint" pattern. Refer to Removing-IFluidRouter.md */
+		requestHandler?: (request: IRequest, runtime: IContainerRuntime) => Promise<IResponse>;
+		provideEntryPoint: (containerRuntime: IContainerRuntime) => Promise<FluidObject>;
+	}): Promise<ContainerRuntimeExtensible> {
+		return ContainerRuntime.loadRuntime(params as InternalLoadParams);
+	}
+
+	//* Not to be invoked directly. Could try to make it abstract, that hit other problems though
+	protected constructor(abstract: typeof creIsAbstract) {
+		super();
+		if (abstract !== creIsAbstract) {
+			throw new UsageError(
+				"This class should not be used directly. Use loadRuntime, extending MixinBase if needed.",
+			);
+		}
+	}
+
+	protected addContainerStateToSummary(
+		summaryTree: ISummaryTreeWithStats,
+		fullTree: boolean,
+		trackState: boolean,
+		telemetryContext?: ITelemetryContext,
+	) {}
+}
+
+function testMixin(
+	Base: typeof ContainerRuntimeExtensible = ContainerRuntimeExtensible.MixinBase,
+): typeof ContainerRuntimeExtensible {
+	class Foo extends Base {
+		public static async loadRuntime(params: any) {
+			return Base.loadRuntime(params);
+		}
+	}
+	return Foo;
+}
+
+//* TODO: Make this not compile?
+testMixin(ContainerRuntimeExtensible);
+
+//* Use this instead:
+testMixin(ContainerRuntimeExtensible.MixinBase);
+
+/**
+ * Represents the runtime of the container. Contains helper functions/state of the container.
+ * It will define the store level mappings.
+ * @internal
+ */
 export class ContainerRuntime
-	extends TypedEventEmitter<IContainerRuntimeEvents & ISummarizerEvents>
+	extends ContainerRuntimeExtensible
 	implements
 		IContainerRuntime,
 		IRuntime,
@@ -791,17 +870,7 @@ export class ContainerRuntime
 	 * - provideEntryPoint - Promise that resolves to an object which will act as entryPoint for the Container.
 	 * This object should provide all the functionality that the Container is expected to provide to the loader layer.
 	 */
-	public static async loadRuntime(params: {
-		context: IContainerContext;
-		registryEntries: NamedFluidDataStoreRegistryEntries;
-		existing: boolean;
-		runtimeOptions?: IContainerRuntimeOptions;
-		containerScope?: FluidObject;
-		containerRuntimeCtor?: typeof ContainerRuntime;
-		/** @deprecated Will be removed once Loader LTS version is "2.0.0-internal.7.0.0". Migrate all usage of IFluidRouter to the "entryPoint" pattern. Refer to Removing-IFluidRouter.md */
-		requestHandler?: (request: IRequest, runtime: IContainerRuntime) => Promise<IResponse>;
-		provideEntryPoint: (containerRuntime: IContainerRuntime) => Promise<FluidObject>;
-	}): Promise<ContainerRuntime> {
+	public static async loadRuntime(params: InternalLoadParams): Promise<ContainerRuntime> {
 		const {
 			context,
 			registryEntries,
@@ -1401,7 +1470,7 @@ export class ContainerRuntime
 			...runtimeOptions.summaryOptions?.summaryConfigOverrides,
 		},
 	) {
-		super();
+		super(creIsAbstract);
 
 		const {
 			options,

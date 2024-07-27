@@ -13,6 +13,8 @@ export {
 	isRuntimeMessage,
 	agentSchedulerId,
 	ContainerRuntime,
+	ContainerRuntimeExtensible,
+	InternalLoadParams,
 	DeletedResponseHeaderKey,
 	TombstoneResponseHeaderKey,
 	InactiveResponseHeaderKey,
@@ -22,6 +24,7 @@ export {
 	CompressionAlgorithms,
 	RuntimeHeaderData,
 	disabledCompressionConfig,
+	Patch,
 } from "./containerRuntime.js";
 export {
 	ContainerMessageType,

@@ -64,6 +64,7 @@ import {
 	IContainerRuntimeOptions,
 	IPendingRuntimeState,
 	defaultPendingOpsWaitTimeoutMs,
+	ContainerRuntimeExtensible,
 } from "../containerRuntime.js";
 import {
 	ContainerMessageType,
@@ -1215,20 +1216,20 @@ describe("Runtime", () => {
 		describe("Supports mixin classes", () => {
 			it("new loadRuntime method works", async () => {
 				const makeMixin = <T>(
-					Base: typeof ContainerRuntime,
+					Base: typeof ContainerRuntimeExtensible,
 					methodName: string,
 					methodReturn: T,
 				) =>
 					class MixinContainerRuntime extends Base {
 						public static async loadRuntime(params: {
 							context: IContainerContext;
-							containerRuntimeCtor?: typeof ContainerRuntime;
+							containerRuntimeCtor?: typeof ContainerRuntimeExtensible;
 							provideEntryPoint: (containerRuntime: IContainerRuntime) => Promise<FluidObject>;
 							existing: boolean;
 							runtimeOptions: IContainerRuntimeOptions;
 							registryEntries: NamedFluidDataStoreRegistryEntries;
 							containerScope: FluidObject;
-						}): Promise<ContainerRuntime> {
+						}): Promise<ContainerRuntimeExtensible> {
 							// Note: we're mutating the parameter object here, normally a no-no, but shouldn't be
 							// an issue in our tests.
 							params.containerRuntimeCtor =
@@ -1240,14 +1241,14 @@ describe("Runtime", () => {
 						public [methodName](): T {
 							return methodReturn;
 						}
-					} as typeof ContainerRuntime;
+					} as typeof ContainerRuntimeExtensible;
 
 				const myEntryPoint: FluidObject = {
 					myProp: "myValue",
 				};
 
 				const runtime = await makeMixin(
-					makeMixin(ContainerRuntime, "method1", "mixed in return"),
+					makeMixin(ContainerRuntimeExtensible.MixinBase, "method1", "mixed in return"),
 					"method2",
 					42,
 				).loadRuntime({
