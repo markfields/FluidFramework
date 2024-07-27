@@ -33,7 +33,7 @@ export enum ContainerMessageType {
 }
 
 // @alpha (undocumented)
-export class ContainerRuntimeExtensible extends TypedEventEmitter<IContainerRuntimeEvents & ISummarizerEvents> {
+export class ContainerRuntime extends TypedEventEmitter<IContainerRuntimeEvents & ISummarizerEvents> {
     protected constructor(abstract: typeof creIsAbstract);
     // (undocumented)
     protected addContainerStateToSummary(summaryTree: ISummaryTreeWithStats, fullTree: boolean, trackState: boolean, telemetryContext?: ITelemetryContext): void;
@@ -44,12 +44,12 @@ export class ContainerRuntimeExtensible extends TypedEventEmitter<IContainerRunt
         existing: boolean;
         runtimeOptions?: IContainerRuntimeOptions;
         containerScope?: FluidObject;
-        containerRuntimeCtor?: typeof ContainerRuntimeExtensible;
+        containerRuntimeCtor?: typeof ContainerRuntime;
         requestHandler?: (request: IRequest, runtime: IContainerRuntime) => Promise<IResponse>;
         provideEntryPoint: (containerRuntime: IContainerRuntime) => Promise<FluidObject>;
-    }): Promise<ContainerRuntimeExtensible>;
+    }): Promise<IRuntime>;
     // (undocumented)
-    static get MixinBase(): typeof ContainerRuntimeExtensible;
+    static get MixinBase(): typeof ContainerRuntime;
 }
 
 // @alpha

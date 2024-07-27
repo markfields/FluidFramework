@@ -21,7 +21,7 @@ import { createChildLogger } from "@fluidframework/telemetry-utils/internal";
 import { MockFluidDataStoreRuntime } from "@fluidframework/test-runtime-utils/internal";
 
 import { wrapContextForInnerChannel } from "../channelCollection.js";
-import { ContainerRuntime } from "../containerRuntime.js";
+import { type ContainerRuntimeInternal } from "../containerRuntime.js";
 import { LocalFluidDataStoreContext } from "../dataStoreContext.js";
 import { createRootSummarizerNodeWithGC } from "../summary/index.js";
 
@@ -45,7 +45,7 @@ describe("Data Store Creation Tests", () => {
 		let storage: IDocumentStorageService;
 		let scope: FluidObject;
 		const makeLocallyVisibleFn = () => {};
-		let containerRuntime: ContainerRuntime;
+		let containerRuntime: ContainerRuntimeInternal;
 		const defaultName = "default";
 		const dataStoreAName = "dataStoreA";
 		const dataStoreBName = "dataStoreB";
@@ -114,7 +114,7 @@ describe("Data Store Creation Tests", () => {
 				on: (event, listener) => {},
 				baselogger: createChildLogger(),
 				clientDetails: {},
-			} as unknown as ContainerRuntime;
+			} as unknown as ContainerRuntimeInternal;
 			const summarizerNode = createRootSummarizerNodeWithGC(
 				createChildLogger(),
 				(() => {}) as unknown as SummarizeInternalFn,

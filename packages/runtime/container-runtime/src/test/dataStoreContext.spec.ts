@@ -56,7 +56,7 @@ import {
 	getLocalDataStoreType,
 	wrapContextForInnerChannel,
 } from "../channelCollection.js";
-import { ContainerRuntime } from "../containerRuntime.js";
+import { ContainerRuntimeInternal } from "../containerRuntime.js";
 import { channelToDataStore } from "../dataStore.js";
 import {
 	LocalDetachedFluidDataStoreContext,
@@ -83,14 +83,14 @@ describe("Data Store Context Tests", () => {
 		let storage: IDocumentStorageService;
 		let scope: FluidObject;
 		const makeLocallyVisibleFn = () => {};
-		let containerRuntime: ContainerRuntime;
+		let containerRuntime: ContainerRuntimeInternal;
 		let summarizerNode: IRootSummarizerNodeWithGC;
 
 		function createContainerRuntime(
 			logger: ITelemetryBaseLogger = createChildLogger(),
 			clientDetails = {},
 			submitMessage = (type: string, contents: any, localOpMetadata: unknown) => {},
-		): ContainerRuntime {
+		): ContainerRuntimeInternal {
 			const factory: IFluidDataStoreFactory = {
 				type: "store-type",
 				get IFluidDataStoreFactory() {
@@ -112,7 +112,7 @@ describe("Data Store Context Tests", () => {
 				baseLogger: logger,
 				clientDetails,
 				submitMessage,
-			} as ContainerRuntime;
+			} as ContainerRuntimeInternal;
 		}
 
 		beforeEach(async () => {
@@ -289,7 +289,7 @@ describe("Data Store Context Tests", () => {
 					IFluidDataStoreRegistry: registryWithSubRegistries,
 					on: (event, listener) => {},
 					clientDetails: {},
-				} as ContainerRuntime;
+				} as ContainerRuntimeInternal;
 				localDataStoreContext = new LocalFluidDataStoreContext({
 					id: dataStoreId,
 					pkg: ["TestComp", "SubComp"],
@@ -563,7 +563,7 @@ describe("Data Store Context Tests", () => {
 		const storage: Partial<IDocumentStorageService> = {};
 		let scope: FluidObject;
 		let summarizerNode: IRootSummarizerNodeWithGC;
-		let containerRuntime: ContainerRuntime;
+		let containerRuntime: ContainerRuntimeInternal;
 
 		beforeEach(async () => {
 			const factory: { [key: string]: any } = {};
@@ -582,7 +582,7 @@ describe("Data Store Context Tests", () => {
 				isSnapshotFetchRequired: (path) => false,
 				containerRuntime,
 				blobContents: undefined,
-			} as unknown as ContainerRuntime;
+			} as unknown as ContainerRuntimeInternal;
 		});
 
 		describe("Initialization - can correctly initialize and generate attributes", () => {
@@ -1025,7 +1025,7 @@ describe("Data Store Context Tests", () => {
 				channelCollection,
 				createChildLogger({ logger: containerRuntime.baseLogger }),
 			);
-		let containerRuntime: ContainerRuntime;
+		let containerRuntime: ContainerRuntimeInternal;
 		let channelCollection: ChannelCollection;
 		let provideDsRuntimeWithFailingEntrypoint = false;
 
@@ -1080,7 +1080,7 @@ describe("Data Store Context Tests", () => {
 				on: (event, listener) => {},
 				baseLogger: createChildLogger(),
 				clientDetails: {},
-			} as unknown as ContainerRuntime;
+			} as unknown as ContainerRuntimeInternal;
 
 			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
 			channelCollection = {

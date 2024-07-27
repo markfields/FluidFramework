@@ -13,7 +13,7 @@ export {
 	isRuntimeMessage,
 	agentSchedulerId,
 	ContainerRuntime,
-	ContainerRuntimeExtensible,
+	ContainerRuntimeInternal,
 	InternalLoadParams,
 	DeletedResponseHeaderKey,
 	TombstoneResponseHeaderKey,

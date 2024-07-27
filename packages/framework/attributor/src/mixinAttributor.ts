@@ -7,8 +7,9 @@ import { bufferToString } from "@fluid-internal/client-utils";
 import {
 	type IDeltaManager,
 	type IContainerContext,
+	type IRuntime,
 } from "@fluidframework/container-definitions/internal";
-import { ContainerRuntimeExtensible } from "@fluidframework/container-runtime/internal";
+import { ContainerRuntime } from "@fluidframework/container-runtime/internal";
 import type { IContainerRuntimeOptions } from "@fluidframework/container-runtime/internal";
 import { type IContainerRuntime } from "@fluidframework/container-runtime-definitions/internal";
 import {
@@ -116,8 +117,8 @@ export function createRuntimeAttributor(): IRuntimeAttributor {
  * @internal
  */
 export const mixinAttributor = (
-	Base: typeof ContainerRuntimeExtensible = ContainerRuntimeExtensible.MixinBase,
-): typeof ContainerRuntimeExtensible =>
+	Base: typeof ContainerRuntime = ContainerRuntime.MixinBase,
+): typeof ContainerRuntime =>
 	class ContainerRuntimeWithAttributor extends Base {
 		public static async loadRuntime(params: {
 			context: IContainerContext;
@@ -125,13 +126,13 @@ export const mixinAttributor = (
 			existing: boolean;
 			runtimeOptions?: IContainerRuntimeOptions;
 			containerScope?: FluidObject;
-			containerRuntimeCtor?: typeof ContainerRuntimeExtensible;
+			containerRuntimeCtor?: typeof ContainerRuntime;
 			/**
 			 * @deprecated Will be removed once Loader LTS version is "2.0.0-internal.7.0.0". Migrate all usage of IFluidRouter to the "entryPoint" pattern. Refer to Removing-IFluidRouter.md
 			 */
 			requestHandler?: (request: IRequest, runtime: IContainerRuntime) => Promise<IResponse>;
 			provideEntryPoint: (containerRuntime: IContainerRuntime) => Promise<FluidObject>;
-		}): Promise<ContainerRuntimeExtensible> {
+		}): Promise<IRuntime & IContainerRuntime> {
 			const {
 				context,
 				registryEntries,
@@ -140,7 +141,7 @@ export const mixinAttributor = (
 				provideEntryPoint,
 				runtimeOptions,
 				containerScope,
-				containerRuntimeCtor = ContainerRuntimeWithAttributor as unknown as typeof ContainerRuntimeExtensible,
+				containerRuntimeCtor = ContainerRuntimeWithAttributor as unknown as typeof ContainerRuntime,
 			} = params;
 
 			const runtimeAttributor = (
@@ -174,7 +175,7 @@ export const mixinAttributor = (
 			}
 
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-			const runtime = (await Base.loadRuntime({
+			const runtime = await Base.loadRuntime({
 				context,
 				registryEntries,
 				requestHandler,
@@ -186,7 +187,7 @@ export const mixinAttributor = (
 				existing,
 				containerRuntimeCtor,
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			} as any)) as ContainerRuntimeWithAttributor & IContainerRuntime; //* TODO: Move the needed things down to Extensible class. Introduce interface?
+			} as any) as IRuntime & IContainerRuntime & ContainerRuntimeWithAttributor; //* TODO: Move the needed things down to base class/interface
 			runtime.runtimeAttributor = runtimeAttributor as RuntimeAttributor;
 
 			const logger = createChildLogger({
@@ -239,10 +240,10 @@ export const mixinAttributor = (
 				addSummarizeResultToSummary(summaryTree, attributorTreeName, attributorSummary);
 			}
 		}
-	} as unknown as typeof ContainerRuntimeExtensible;
+	} as unknown as typeof ContainerRuntime;
 
-const a1 = mixinAttributor(ContainerRuntimeExtensible.MixinBase);
-const a2 = mixinAttributor(a1);
+//* const a1 = mixinAttributor(ContainerRuntime.MixinBase);
+//* const a2 = mixinAttributor(a1);
 
 class RuntimeAttributor implements IRuntimeAttributor {
 	public get IRuntimeAttributor(): IRuntimeAttributor {
