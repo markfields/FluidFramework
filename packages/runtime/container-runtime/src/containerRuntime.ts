@@ -520,7 +520,8 @@ export interface IContainerRuntimeOptions {
 	 *
 	 * By default, the feature is enabled.
 	 */
-	readonly enableGroupedBatching?: boolean;
+	// STEP 1: DEPRECATE THIS PROPERTY
+	// readonly enableGroupedBatching?: boolean;
 
 	/**
 	 * When this property is set to true, it requires runtime to control is document schema properly through ops
@@ -912,7 +913,7 @@ export class ContainerRuntime
 			maxBatchSizeInBytes = defaultMaxBatchSizeInBytes,
 			enableRuntimeIdCompressor,
 			chunkSizeInBytes = defaultChunkSizeInBytes,
-			enableGroupedBatching = true,
+			// enableGroupedBatching = true,
 			explicitSchemaControl = false,
 		} = runtimeOptions;
 
@@ -1083,7 +1084,8 @@ export class ContainerRuntime
 				explicitSchemaControl,
 				compressionLz4,
 				idCompressorMode,
-				opGroupingEnabled: enableGroupedBatching,
+				// This is the weird part, comment it clearly
+				opGroupingEnabled: compressionLz4, // enableGroupedBatching,
 				disallowedVersions: [],
 			},
 			(schema) => {
@@ -1110,7 +1112,7 @@ export class ContainerRuntime
 				chunkSizeInBytes,
 				// Requires<> drops undefined from IdCompressorType
 				enableRuntimeIdCompressor: enableRuntimeIdCompressor as "on" | "delayed",
-				enableGroupedBatching,
+				// enableGroupedBatching,
 				explicitSchemaControl,
 			},
 			containerScope,
