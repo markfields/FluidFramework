@@ -471,13 +471,6 @@ export interface IContainerRuntimeOptions {
 	 */
 	readonly loadSequenceNumberVerification?: "close" | "log" | "bypass";
 	/**
-	 * Sets the flush mode for the runtime. In Immediate flush mode the runtime will immediately
-	 * send all operations to the driver layer, while in TurnBased the operations will be buffered
-	 * and then sent them as a single batch at the end of the turn.
-	 * By default, flush mode is TurnBased.
-	 */
-	readonly flushMode?: FlushMode;
-	/**
 	 * Enables the runtime to compress ops. See {@link ICompressionRuntimeOptions}.
 	 */
 	readonly compressionOptions?: ICompressionRuntimeOptions;
@@ -514,16 +507,6 @@ export interface IContainerRuntimeOptions {
 	readonly enableRuntimeIdCompressor?: IdCompressorMode;
 
 	/**
-	 * If enabled, the runtime will group messages within a batch into a single
-	 * message to be sent to the service.
-	 * The grouping an ungrouping of such messages is handled by the "OpGroupingManager".
-	 *
-	 * By default, the feature is enabled.
-	 */
-	// STEP 1: DEPRECATE THIS PROPERTY
-	// readonly enableGroupedBatching?: boolean;
-
-	/**
 	 * When this property is set to true, it requires runtime to control is document schema properly through ops
 	 * The benefit of this mode is that clients who do not understand schema will fail in predictable way, with predictable message,
 	 * and will not attempt to limp along, which could cause data corruptions and crashes in random places.
@@ -531,6 +514,25 @@ export interface IContainerRuntimeOptions {
 	 * are engaged as they become available, without giving legacy clients any chance to fail predictably.
 	 */
 	readonly explicitSchemaControl?: boolean;
+}
+
+export interface IContainerRuntimeOptionsInternal extends IContainerRuntimeOptions {
+	/**
+	 * Sets the flush mode for the runtime. In Immediate flush mode the runtime will immediately
+	 * send all operations to the driver layer, while in TurnBased the operations will be buffered
+	 * and then sent them as a single batch at the end of the turn.
+	 * By default, flush mode is TurnBased.
+	 */
+	readonly flushMode?: FlushMode | FlushModeExperimental;
+
+	/**
+	 * If enabled, the runtime will group messages within a batch into a single
+	 * message to be sent to the service.
+	 * The grouping an ungrouping of such messages is handled by the "OpGroupingManager".
+	 *
+	 * By default, the feature is enabled.
+	 */
+	readonly enableGroupedBatching?: boolean;
 }
 
 /**
@@ -868,7 +870,7 @@ export class ContainerRuntime
 		context: IContainerContext;
 		registryEntries: NamedFluidDataStoreRegistryEntries;
 		existing: boolean;
-		runtimeOptions?: IContainerRuntimeOptions;
+		runtimeOptions?: IContainerRuntimeOptions; // May also include options from IContainerRuntimeOptionsInternal
 		containerScope?: FluidObject;
 		containerRuntimeCtor?: typeof ContainerRuntime;
 		/** @deprecated Will be removed once Loader LTS version is "2.0.0-internal.7.0.0". Migrate all usage of IFluidRouter to the "entryPoint" pattern. Refer to Removing-IFluidRouter.md */
@@ -913,9 +915,9 @@ export class ContainerRuntime
 			maxBatchSizeInBytes = defaultMaxBatchSizeInBytes,
 			enableRuntimeIdCompressor,
 			chunkSizeInBytes = defaultChunkSizeInBytes,
-			// enableGroupedBatching = true,
+			enableGroupedBatching = true,
 			explicitSchemaControl = false,
-		} = runtimeOptions;
+		} = runtimeOptions as IContainerRuntimeOptionsInternal;
 
 		const registry = new FluidDataStoreRegistry(registryEntries);
 
@@ -1076,6 +1078,15 @@ export class ContainerRuntime
 			compressionOptions.minimumBatchSizeInBytes !== Infinity &&
 			compressionOptions.compressionAlgorithm === "lz4";
 
+		// Compression (of any kind) only supports compression a single-message batch,
+		// so if Grouped Batching is disabled it won't work and we need to bail.
+		// Note: Grouped Batching cannot be disabled except via internal configuration, e.g. compatibilityConfiguration.ts
+		if (!enableGroupedBatching && compressionLz4) {
+			throw new UsageError("Grouped batching must be enabled when using lz4 compression", {
+				details: { ...compressionOptions },
+			});
+		}
+
 		const documentSchemaController = new DocumentsSchemaController(
 			existing,
 			protocolSequenceNumber,
@@ -1084,8 +1095,7 @@ export class ContainerRuntime
 				explicitSchemaControl,
 				compressionLz4,
 				idCompressorMode,
-				// This is the weird part, comment it clearly
-				opGroupingEnabled: compressionLz4, // enableGroupedBatching,
+				opGroupingEnabled: enableGroupedBatching,
 				disallowedVersions: [],
 			},
 			(schema) => {
@@ -1112,9 +1122,11 @@ export class ContainerRuntime
 				chunkSizeInBytes,
 				// Requires<> drops undefined from IdCompressorType
 				enableRuntimeIdCompressor: enableRuntimeIdCompressor as "on" | "delayed",
-				// enableGroupedBatching,
+				enableGroupedBatching,
 				explicitSchemaControl,
-			},
+			} satisfies Readonly<Required<IContainerRuntimeOptionsInternal>> as Readonly<
+				Required<IContainerRuntimeOptions>
+			>,
 			containerScope,
 			logger,
 			existing,
@@ -1192,7 +1204,7 @@ export class ContainerRuntime
 	public readonly closeFn: (error?: ICriticalContainerError) => void;
 
 	public get flushMode(): FlushMode {
-		return this._flushMode;
+		return this._flushMode as FlushMode;
 	}
 
 	public get scope(): FluidObject {
@@ -1307,7 +1319,7 @@ export class ContainerRuntime
 	private readonly defaultMaxConsecutiveReconnects = 7;
 
 	private _orderSequentiallyCalls: number = 0;
-	private readonly _flushMode: FlushMode;
+	private readonly _flushMode: FlushMode | FlushModeExperimental;
 	private readonly offlineEnabled: boolean;
 	private flushTaskExists = false;
 
@@ -1476,6 +1488,8 @@ export class ContainerRuntime
 		expiry: { policy: "absolute", durationMs: 60000 },
 	});
 
+	private readonly runtimeOptions: Readonly<Required<IContainerRuntimeOptionsInternal>>;
+
 	/***/
 	protected constructor(
 		context: IContainerContext,
@@ -1484,7 +1498,7 @@ export class ContainerRuntime
 		electedSummarizerData: ISerializedElection | undefined,
 		chunks: [string, string[]][],
 		dataStoreAliasMap: [string, string][],
-		private readonly runtimeOptions: Readonly<Required<IContainerRuntimeOptions>>,
+		runtimeOptions: Readonly<Required<IContainerRuntimeOptions>>,
 		private readonly containerScope: FluidObject,
 		// Create a custom ITelemetryBaseLogger to output telemetry events.
 		public readonly baseLogger: ITelemetryBaseLogger,
@@ -1528,6 +1542,10 @@ export class ContainerRuntime
 			supportedFeatures,
 			snapshotWithContents,
 		} = context;
+
+		this.runtimeOptions = runtimeOptions as Readonly<
+			Required<IContainerRuntimeOptionsInternal>
+		>;
 
 		this.logger = createChildLogger({ logger: this.baseLogger });
 		this.mc = createChildMonitoringContext({
@@ -1698,15 +1716,17 @@ export class ContainerRuntime
 			this.mc.config.getNumber(maxConsecutiveReconnectsKey) ??
 			this.defaultMaxConsecutiveReconnects;
 
+		//* Switch to Experimental one on interface
 		if (
-			runtimeOptions.flushMode === (FlushModeExperimental.Async as unknown as FlushMode) &&
+			this.runtimeOptions.flushMode ===
+				(FlushModeExperimental.Async as unknown as FlushMode) &&
 			supportedFeatures?.get("referenceSequenceNumbers") !== true
 		) {
 			// The loader does not support reference sequence numbers, falling back on FlushMode.TurnBased
 			this.mc.logger.sendErrorEvent({ eventName: "FlushModeFallback" });
 			this._flushMode = FlushMode.TurnBased;
 		} else {
-			this._flushMode = runtimeOptions.flushMode;
+			this._flushMode = this.runtimeOptions.flushMode;
 		}
 		this.offlineEnabled =
 			this.mc.config.getBoolean("Fluid.Container.enableOfflineLoad") ?? false;

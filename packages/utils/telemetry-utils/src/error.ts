@@ -74,7 +74,7 @@ export class GenericError extends LoggingError implements IGenericError, IFluidE
 export class UsageError extends LoggingError implements IUsageError, IFluidErrorBase {
 	public readonly errorType = FluidErrorTypes.usageError;
 
-	public constructor(message: string, props?: ITelemetryBaseProperties) {
+	public constructor(message: string, props?: ITelemetryPropertiesExt) {
 		super(message, { ...props, usageError: true });
 	}
 }
