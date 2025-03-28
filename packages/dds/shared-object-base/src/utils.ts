@@ -4,6 +4,7 @@
  */
 
 import { IFluidHandle } from "@fluidframework/core-interfaces";
+import type { IFluidHandleInternal } from "@fluidframework/core-interfaces/internal";
 import type { IChannel } from "@fluidframework/datastore-definitions/internal";
 import { ISummaryTreeWithStats } from "@fluidframework/runtime-definitions/internal";
 import { SummaryTreeBuilder } from "@fluidframework/runtime-utils/internal";
@@ -35,6 +36,8 @@ export function serializeHandles(
  * The original `input` object is not mutated.  This method will shallowly clones all objects in the path from
  * the root to any replaced handles.  (If no handles are found, returns the original object.)
  *
+ * @deprecated Use {@link IFluidSerializer.encode} instead.
+ *
  * @param input - The mostly-plain object
  * @param context - The handle context for the container
  * @param bind - Bind any other handles we find in the object against this given handle.
@@ -51,8 +54,31 @@ export function makeHandlesSerializable(
 }
 
 /**
+ * Encode all the handles in the given value, binding them to the given bind source.
+ *
+ * @internal
+ */
+export function encodeHandles(
+	value: unknown,
+	serializer: IFluidSerializer,
+	bindSource: Pick<IFluidHandleInternal, "bind">,
+): unknown {
+	// The typing around the "bind" argument for serializing/encoding handles is broken.
+	// Many of these take IFluidHandle, but that type doesn't even have the "bind" method!
+	// In practice, the IFluidHandle instances used are always IFluidHandleInternal, so the "bind" method will be there.
+	// Furthermore, the bind method is _all_ that is required - it need not be a handle of any kind,
+	// hence the type of the bindSource argument on this helper.
+
+	// In the future we intend to clean up the typing, but for now we will have this sequence of casts.
+	return serializer.encode(value, bindSource as Partial<IFluidHandleInternal> as IFluidHandle);
+}
+
+/**
  * Given a fully-plain object that may have serializable-form handles within, will return the mostly-plain object
  * with handle objects created instead.
+ *
+ * @deprecated Use {@link IFluidSerializer.decode} instead.
+ *
  * @remarks Idempotent when called multiple times.
  * @param value - The fully-plain object
  * @param serializer - The serializer that knows how to convert serializable-form handles into handle objects
