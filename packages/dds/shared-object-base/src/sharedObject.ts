@@ -8,6 +8,8 @@ import { AttachState } from "@fluidframework/container-definitions";
 import type { IDeltaManager } from "@fluidframework/container-definitions/internal";
 import { ITelemetryBaseProperties, type ErasedType } from "@fluidframework/core-interfaces";
 import {
+	type IFluidHandle,
+	type IFluidHandleContext,
 	type IFluidHandleInternal,
 	type IFluidLoadable,
 } from "@fluidframework/core-interfaces/internal";
@@ -458,9 +460,21 @@ export abstract class SharedObjectCore<
 	protected submitLocalMessage(content: unknown, localOpMetadata: unknown = undefined): void {
 		this.verifyNotClosed();
 		if (this.isAttached()) {
+			// The typing around the "bind" argument for serializing/encoding handles is broken.
+			// These functions take an IFluidHandle, but that type doesn't even have the "bind" method!
+			// In practice, the IFluidHandle instances used are always IFluidHandleInternal, so the "bind" method will be there.
+			// Furthermore, the bind method is _all_ that is required - it need not be a handle of any kind.
+			// In this case, we are using the route context for the DataStoreRuntime as the bind source.
+			// DataStores and DDSes always bind to one another and attach all together, so this is equivalent to binding from the DDS handle.
+			// In the future we intend to clean up the typing, but for now we will use this sequence of casts.
+			const bind: IFluidHandle = // (Not actually a handle, as just explained)
+				this.runtime.IFluidHandleContext as Pick<
+					IFluidHandleContext,
+					"bind"
+				> as Partial<IFluidHandleInternal> as IFluidHandle;
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			this.services!.deltaConnection.submit(
-				makeHandlesSerializable(content, this.serializer, this.handle),
+				makeHandlesSerializable(content, this.serializer, bind),
 				localOpMetadata,
 			);
 		}
