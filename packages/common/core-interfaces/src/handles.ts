@@ -21,37 +21,11 @@ export interface IProvideFluidHandleContext {
 }
 
 /**
- * A node that may be attached to a graph of nodes, along with other "bound" nodes.
- *
- * @legacy
- * @alpha
- */
-export interface IAttachableNode {
-	/**
-	 * Flag indicating whether or not the entity is attached.
-	 */
-	readonly isAttached: boolean;
-
-	/**
-	 * Attach this node and any nodes it has previously bound.
-	 */
-	attachGraph(): void;
-
-	/**
-	 * Track a reference from this node to the given node,
-	 * such that when this is attached, the other will be as well.
-	 */
-	bind(node: IAttachableNode): void;
-}
-
-/**
  * Describes a routing context from which other `IFluidHandleContext`s are defined.
  * @legacy
  * @alpha
  */
-export interface IFluidHandleContext
-	extends IProvideFluidHandleContext,
-		Partial<IAttachableNode> {
+export interface IFluidHandleContext extends IProvideFluidHandleContext {
 	/**
 	 * The absolute path to the handle context from the root.
 	 */
@@ -76,9 +50,9 @@ export interface IFluidHandleContext
 	resolveHandle(request: IRequest): Promise<IResponse>;
 
 	/**
-	 * See {@link IAttachableNode.bind}
+	 * Track the given node such that whenever this is attached, the other will be as well.
 	 */
-	bind?: IAttachableNode["bind"];
+	bind?(attachable: { attachGraph: () => void }): void;
 }
 
 /**
@@ -114,7 +88,6 @@ export interface IFluidHandleInternal<
 	// REVIEW: Constrain `T` to something? How do we support dds and datastores safely?
 	out T = unknown, // FluidObject & IFluidLoadable,
 > extends IFluidHandle<T>,
-		IAttachableNode,
 		IProvideFluidHandle {
 	/**
 	 * The absolute path to the handle context from the root.
@@ -122,17 +95,15 @@ export interface IFluidHandleInternal<
 	readonly absolutePath: string;
 
 	/**
+	 * Runs through the graph and attach the bounded handles.
+	 */
+	attachGraph(): void;
+
+	/**
 	 * Binds the given handle to this one or attach the given handle if this handle is attached.
 	 * A bound handle will also be attached once this handle is attached.
-	 *
-	 * @deprecated - Use the signature that takes an {@link IAttachableNode} instead.
 	 */
 	bind(handle: IFluidHandleInternal): void;
-	/**
-	 * Track a reference from this node to the given node,
-	 * such that when this is attached, the other will be as well.
-	 */
-	bind(node: IAttachableNode): void;
 }
 
 /**
