@@ -36,7 +36,7 @@ export function serializeHandles(
  * The original `input` object is not mutated.  This method will shallowly clones all objects in the path from
  * the root to any replaced handles.  (If no handles are found, returns the original object.)
  *
- * @deprecated Use {@link IFluidSerializer.encode} instead.
+ * @deprecated Handle encoding/decoding should not be done manually, the Fluid Framework takes care of this.
  *
  * @param input - The mostly-plain object
  * @param context - The handle context for the container
@@ -56,15 +56,19 @@ export function makeHandlesSerializable(
 /**
  * Encode all the handles in the given value, binding them to the given bind source.
  *
+ * @privateRemarks This is an internal copy of makeHandlesSerializable with better typing
+ *
  * @internal
  */
 export function encodeHandles(
 	value: unknown,
 	serializer: IFluidSerializer,
-	bindSource: Pick<IFluidHandleInternal, "bind">,
+	bindSource: {
+		bind(attachable: { attachGraph: () => void }): void;
+	},
 ): unknown {
 	// The typing around the "bind" argument for serializing/encoding handles is broken.
-	// Many of these take IFluidHandle, but that type doesn't even have the "bind" method!
+	// Many of these take IFluidHandle, but that type doesn't even include the "bind" method!
 	// In practice, the IFluidHandle instances used are always IFluidHandleInternal, so the "bind" method will be there.
 	// Furthermore, the bind method is _all_ that is required - it need not be a handle of any kind,
 	// hence the type of the bindSource argument on this helper.
