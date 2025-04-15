@@ -3,13 +3,38 @@
  * Licensed under the MIT License.
  */
 
-import {
-	IErrorEvent,
-	IEventProvider,
-	IEventThisPlaceHolder,
-} from "@fluidframework/core-interfaces";
-import { IChannel } from "@fluidframework/datastore-definitions/internal";
-import { ISequencedDocumentMessage } from "@fluidframework/driver-definitions/internal";
+import type { IEvent, IEventProvider } from "@fluidframework/core-interfaces";
+import type { IFluidLoadable, IFluidHandleInternal } from "@fluidframework/core-interfaces/internal";
+import type { IChannel } from "@fluidframework/datastore-definitions/internal";
+import type { ChannelAttachBroker } from "@fluidframework/datastore-definitions/internal";
+
+/**
+ * Base interface for shared objects from which other interfaces derive.
+ * @legacy
+ * @alpha
+ */
+export interface ISharedObject<TEvent extends ISharedObjectEvents = ISharedObjectEvents>
+	extends IChannel,
+		IFluidLoadable,
+		IProvideFluidHandle, // eslint-disable-line @typescript-eslint/no-empty-interface
+		IEventProvider<TEvent> {
+	/**
+	 * Binds the given shared object to its containing data store runtime, causing it to attach.
+	 *
+	 * @remarks
+	 *
+	 * This includes registering the object in the runtime registry and attaching it to the delta manager.
+	 *
+	 * This method should only be called by the data store runtime.
+	 */
+	bindToContext(): void;
+
+	/**
+	 * The broker responsible for managing the attachment state of this shared object.
+	 * @internal
+	 */
+	readonly broker: ChannelAttachBroker;
+}
 
 /**
  * Events emitted by {@link ISharedObject}.
@@ -50,19 +75,4 @@ export interface ISharedObjectEvents extends IErrorEvent {
 			target: IEventThisPlaceHolder,
 		) => void,
 	);
-}
-
-/**
- * Base interface for shared objects from which other interfaces derive. Implemented by SharedObject
- * @legacy
- * @alpha
- */
-export interface ISharedObject<TEvent extends ISharedObjectEvents = ISharedObjectEvents>
-	extends IChannel,
-		IEventProvider<TEvent> {
-	/**
-	 * Binds the given shared object to its containing data store runtime, causing it to attach once
-	 * the runtime attaches.
-	 */
-	bindToContext(): void;
 }

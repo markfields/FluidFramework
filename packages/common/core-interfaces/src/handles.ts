@@ -37,6 +37,7 @@ export interface IFluidHandleContext extends IProvideFluidHandleContext {
 	 */
 	readonly routeContext?: IFluidHandleContext;
 
+	//* Deprecate this?
 	/**
 	 * Flag indicating whether or not the entity has services attached.
 	 */
@@ -48,6 +49,19 @@ export interface IFluidHandleContext extends IProvideFluidHandleContext {
 	attachGraph(): void;
 
 	resolveHandle(request: IRequest): Promise<IResponse>;
+}
+
+/**
+ * Interface for managing the attachment state of an object associated with a handle.
+ * @internal
+ */
+export interface IChannelAttachBroker {
+	/**
+	 * Flag indicating whether or not the associated object is attached.
+	 */
+	readonly isAttached: boolean;
+
+	// TODO: Add other relevant methods/properties as needed, e.g., for attach propagation or reference tracking.
 }
 
 /**
@@ -90,15 +104,22 @@ export interface IFluidHandleInternal<
 	readonly absolutePath: string;
 
 	/**
+	 * @deprecated Replaced by broker attach propagation.
 	 * Runs through the graph and attach the bounded handles.
 	 */
 	attachGraph(): void;
 
 	/**
+	 * @deprecated Replaced by broker reference tracking.
 	 * Binds the given handle to this one or attach the given handle if this handle is attached.
 	 * A bound handle will also be attached once this handle is attached.
 	 */
 	bind(handle: IFluidHandleInternal): void;
+
+	/**
+	 * The broker responsible for managing the attachment state of the referenced object.
+	 */
+	readonly broker: IChannelAttachBroker;
 }
 
 /**

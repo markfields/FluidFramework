@@ -210,16 +210,18 @@ export class FluidSerializer implements IFluidSerializer {
 
 	/**
 	 * Encodes the given IFluidHandle into a JSON-serializable form,
-	 * also binding it to another node to ensure it attaches at the right time.
-	 * @param handle - The IFluidHandle to serialize.
-	 * @param bind - The binding context for the handle (the handle will become attached whenever this context is attached).
+	 * also registering the attachment relationship via their brokers.
+	 * @param handle - The IFluidHandle to serialize (target of the reference).
+	 * @param bind - The binding context handle (source of the reference).
 	 * @returns The serialized handle.
 	 */
 	protected bindAndEncodeHandle(
-		handle: IFluidHandleInternal,
-		bind: IFluidHandleInternal,
+		handle: IFluidHandleInternal, // Target
+		bind: IFluidHandleInternal, // Source
 	): ISerializedHandle {
-		bind.bind(handle);
+		// Instead of bind.bind(handle), register the reference via brokers.
+		// This assumes both handles have a valid broker property accessible.
+		bind.broker.addReference(handle.broker);
 		return encodeHandleForSerialization(handle);
 	}
 }

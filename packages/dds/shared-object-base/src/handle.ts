@@ -24,7 +24,8 @@ export class SharedObjectHandle extends FluidObjectHandle<ISharedObject> {
 	 * Whether services have been attached for the associated shared object.
 	 */
 	public get isAttached(): boolean {
-		return this.value.isAttached();
+		// Access broker via the getter from the base class
+		return this.broker.isAttached;
 	}
 
 	/**
@@ -33,21 +34,21 @@ export class SharedObjectHandle extends FluidObjectHandle<ISharedObject> {
 	 * @param path - The id of the shared object. It is also the path to this object relative to the routeContext.
 	 * @param routeContext - The parent {@link @fluidframework/core-interfaces#IFluidHandleContext} that has a route
 	 * to this handle.
+	 * @param broker - The broker associated with the shared object.
 	 */
 	constructor(
 		protected readonly value: ISharedObject,
 		path: string,
 		routeContext: IFluidHandleContext,
+		broker: ChannelAttachBroker, // Keep broker parameter
 	) {
-		super(value, path, routeContext);
+		// Pass the broker to the super constructor
+		super(value, path, routeContext, broker);
 	}
 
-	/**
-	 * Attaches all bound handles first (which may in turn attach further handles), then attaches this handle.
-	 * When attaching the handle, it registers the associated shared object.
-	 */
-	public attachGraph(): void {
-		this.value.bindToContext();
-		super.attachGraph();
-	}
+	// No need to override 'isAttached' or 'broker' as the base class handles it.
+
+	// No need to override 'attachGraph' as the base class handles deprecation.
+
+	// No need to override 'bind' as the base class handles deprecation.
 }

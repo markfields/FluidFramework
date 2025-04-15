@@ -11,3 +11,4 @@ export {
 	mixinRequestHandler,
 	mixinSummaryHandler,
 } from "./dataStoreRuntime.js";
+export { ChannelAttachBroker } from "./channelAttachBroker.js";

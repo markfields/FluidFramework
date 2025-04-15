@@ -7,6 +7,8 @@ import type { IFluidHandleErased } from "@fluidframework/core-interfaces";
 import { IFluidHandle, fluidHandleSymbol } from "@fluidframework/core-interfaces";
 import type { IFluidHandleInternal } from "@fluidframework/core-interfaces/internal";
 
+import type { ChannelAttachBroker } from "./channelAttachBroker.js";
+
 /**
  * JSON serialized form of an IFluidHandle
  * @internal
@@ -125,8 +127,16 @@ export function toFluidHandleErased<T>(
  * @alpha
  */
 export abstract class FluidHandleBase<T> implements IFluidHandleInternal<T> {
+	constructor(public readonly broker: ChannelAttachBroker) {}
+
 	public abstract absolutePath: string;
+	/**
+	 * @deprecated Replaced by broker attach propagation.
+	 */
 	public abstract attachGraph(): void;
+	/**
+	 * @deprecated Replaced by broker reference tracking.
+	 */
 	public abstract bind(handle: IFluidHandleInternal): void;
 	public abstract readonly isAttached: boolean;
 	public abstract get(): Promise<T>;

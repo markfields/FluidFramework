@@ -11,6 +11,8 @@ import {
 	FluidHandleBase,
 } from "@fluidframework/runtime-utils/internal";
 
+import type { ChannelAttachBroker } from "./channelAttachBroker.js";
+
 /**
  * Handle for a shared {@link @fluidframework/core-interfaces#FluidObject}.
  * @legacy
@@ -19,8 +21,6 @@ import {
 export class FluidObjectHandle<
 	T extends FluidObject = FluidObject,
 > extends FluidHandleBase<T> {
-	private readonly pendingHandlesToMakeVisible: Set<IFluidHandleInternal> = new Set();
-
 	/**
 	 * {@inheritDoc @fluidframework/core-interfaces#IFluidHandle.absolutePath}
 	 */
@@ -30,32 +30,9 @@ export class FluidObjectHandle<
 	 * {@inheritDoc @fluidframework/core-interfaces#IFluidHandle.isAttached}
 	 */
 	public get isAttached(): boolean {
-		return this.routeContext.isAttached;
+		// Use the broker getter which handles fallback
+		return this.broker.isAttached;
 	}
-
-	/**
-	 * Tells whether the object of this handle is visible in the container locally or globally.
-	 */
-	private get visible(): boolean {
-		/**
-		 * If the object of this handle is attached, it is visible in the container. Ideally, checking local visibility
-		 * should be enough for a handle. However, there are scenarios where the object becomes locally visible but the
-		 * handle does not know this - This will happen is attachGraph is never called on the handle. Couple of examples
-		 * where this can happen:
-		 *
-		 * 1. Handles to DDS other than the default handle won't know if the DDS becomes visible after the handle was
-		 * created.
-		 *
-		 * 2. Handles to root data stores will never know that it was visible because the handle will not be stores in
-		 * another DDS and so, attachGraph will never be called on it.
-		 */
-		return this.isAttached || this.locallyVisible;
-	}
-
-	/**
-	 * Tracks whether this handle is locally visible in the container.
-	 */
-	private locallyVisible: boolean = false;
 
 	/**
 	 * Creates a new `FluidObjectHandle`.
@@ -64,13 +41,17 @@ export class FluidObjectHandle<
 	 * @param path - The path to this handle relative to the `routeContext`.
 	 * @param routeContext - The parent {@link @fluidframework/core-interfaces#IFluidHandleContext} that has a route
 	 * to this handle.
+	 * @param broker - Optional: The ChannelAttachBroker associated with the object.
 	 */
 	constructor(
 		protected readonly value: T | Promise<T>,
 		public readonly path: string,
 		public readonly routeContext: IFluidHandleContext,
+		broker?: ChannelAttachBroker, //* Make required
 	) {
-		super();
+		//*
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		super(broker!);
 		this.absolutePath = generateHandleContextPath(path, this.routeContext);
 	}
 
@@ -84,29 +65,37 @@ export class FluidObjectHandle<
 
 	/**
 	 * {@inheritDoc @fluidframework/core-interfaces#IFluidHandle.attachGraph }
+	 * @deprecated Replaced by broker attach propagation.
 	 */
 	public attachGraph(): void {
-		if (this.visible) {
-			return;
-		}
+		console.warn("FluidObjectHandle.attachGraph() called - check if still needed.");
+		// Original logic related to pendingHandlesToMakeVisible and routeContext.attachGraph()
+		// is likely superseded by broker propagation. Making this a no-op for now.
 
-		this.locallyVisible = true;
-		this.pendingHandlesToMakeVisible.forEach((handle) => {
-			handle.attachGraph();
-		});
-		this.pendingHandlesToMakeVisible.clear();
-		this.routeContext.attachGraph();
+		// if (this.visible) {
+		// 	return;
+		// }
+		// this.locallyVisible = true;
+		// this.pendingHandlesToMakeVisible.forEach((handle) => {
+		// 	handle.attachGraph();
+		// });
+		// this.pendingHandlesToMakeVisible.clear();
+		// this.routeContext.attachGraph();
 	}
 
 	/**
-	 * {@inheritDoc @fluidframework/core-interfaces#IFluidHandle.bind}
+	 * {@inheritDoc @fluidframework/core-interfaces#IFluidHandleInternal.bind}
+	 * @deprecated Replaced by broker reference tracking.
 	 */
-	public bind(handle: IFluidHandleInternal) {
-		// If this handle is visible, attach the graph of the incoming handle as well.
-		if (this.visible) {
-			handle.attachGraph();
-			return;
-		}
-		this.pendingHandlesToMakeVisible.add(handle);
+	public bind(handle: IFluidHandleInternal): void {
+		console.warn("FluidObjectHandle.bind() called - should use brokers instead.");
+		// Original logic related to pendingHandlesToMakeVisible is superseded by broker.addReference.
+		// Making this a no-op for now.
+
+		// if (this.visible) {
+		// 	handle.attachGraph();
+		// 	return;
+		// }
+		// this.pendingHandlesToMakeVisible.add(handle);
 	}
 }

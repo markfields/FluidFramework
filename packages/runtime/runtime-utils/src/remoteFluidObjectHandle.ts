@@ -10,6 +10,7 @@ import {
 } from "@fluidframework/core-interfaces/internal";
 import { assert } from "@fluidframework/core-utils/internal";
 
+import type { ChannelAttachBroker } from "./channelAttachBroker.js";
 import { responseToException } from "./dataStoreHelpers.js";
 import { FluidHandleBase } from "./handles.js";
 import { RuntimeHeaders } from "./utils.js";
@@ -35,8 +36,9 @@ export class RemoteFluidObjectHandle extends FluidHandleBase<FluidObject> {
 	constructor(
 		public readonly absolutePath: string,
 		public readonly routeContext: IFluidHandleContext,
+		broker: ChannelAttachBroker,
 	) {
-		super();
+		super(broker);
 		assert(
 			absolutePath.startsWith("/"),
 			0x19d /* "Handles should always have absolute paths" */,

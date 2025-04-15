@@ -269,8 +269,11 @@ export interface IFluidHandleErased<T> extends ErasedType<readonly ["IFluidHandl
 // @alpha
 export interface IFluidHandleInternal<out T = unknown> extends IFluidHandle<T>, IProvideFluidHandle {
     readonly absolutePath: string;
+    // @deprecated (undocumented)
     attachGraph(): void;
+    // @deprecated (undocumented)
     bind(handle: IFluidHandleInternal): void;
+    readonly broker: IChannelAttachBroker;
 }
 
 // @public (undocumented)

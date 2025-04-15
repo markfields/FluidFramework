@@ -3,61 +3,63 @@
  * Licensed under the MIT License.
  */
 
-import { EventEmitterEventType } from "@fluid-internal/client-utils";
+import { EventEmitter } from "@fluidframework/common-utils";
 import { AttachState } from "@fluidframework/container-definitions";
-import type { IDeltaManager } from "@fluidframework/container-definitions/internal";
-import { ITelemetryBaseProperties, type ErasedType } from "@fluidframework/core-interfaces";
 import {
+	IFluidHandle,
+	IFluidLoadable,
 	type IFluidHandleInternal,
-	type IFluidLoadable,
 } from "@fluidframework/core-interfaces/internal";
-import { assert } from "@fluidframework/core-utils/internal";
+import { assert, Deferred } from "@fluidframework/core-utils/internal";
 import {
-	IChannelServices,
-	IChannelStorageService,
+	FluidDataStoreRuntime,
+	IChannelFactory,
 	type IChannel,
-	IChannelAttributes,
-	type IChannelFactory,
-	IFluidDataStoreRuntime,
-	type IDeltaHandler,
+	type IChannelAttributes,
+	type IChannelServices,
+	type IChannelStorageService,
+	type IFluidDataStoreRuntime,
 } from "@fluidframework/datastore-definitions/internal";
+import { type IExperimentalIncrementalSummaryContext } from "@fluidframework/runtime-definitions/internal";
 import {
-	type IDocumentMessage,
-	ISequencedDocumentMessage,
-} from "@fluidframework/driver-definitions/internal";
-import {
-	IExperimentalIncrementalSummaryContext,
-	ISummaryTreeWithStats,
-	ITelemetryContext,
-	IGarbageCollectionData,
-	blobCountPropertyName,
-	totalBlobSizePropertyName,
-	type IRuntimeMessageCollection,
-	type IRuntimeMessagesContent,
-} from "@fluidframework/runtime-definitions/internal";
-import {
-	toDeltaManagerInternal,
-	TelemetryContext,
-} from "@fluidframework/runtime-utils/internal";
-import {
-	ITelemetryLoggerExt,
-	DataProcessingError,
-	EventEmitterWithErrorHandling,
-	MonitoringContext,
-	SampledTelemetryHelper,
 	createChildLogger,
 	loggerToMonitoringContext,
-	tagCodeArtifacts,
+	MonitoringContext,
+	SampledTelemetryHelper,
+	TelemetryEventBatcher,
 	type ICustomData,
+	type ITelemetryLoggerExt,
+	type ITelemetryPropertiesExt,
+	type TelemetryEventPropertyTypeExt,
+} from "@fluidframework/telemetry-utils/internal";
+import {
+	DataProcessingError,
+	EventEmitterWithErrorHandling,
 	type IFluidErrorBase,
 } from "@fluidframework/telemetry-utils/internal";
-import { v4 as uuid } from "uuid";
+import {
+	type IDocumentMessage,
+	type ISequencedDocumentMessage,
+	type MessageType,
+} from "@fluidframework/protocol-definitions";
+import {
+	type IDeltaManager,
+	type IRuntimeMessageCollection,
+	type IRuntimeMessagesContent,
+} from "@fluidframework/container-definitions/internal";
+import {
+	type IGarbageCollectionData,
+	type ISummaryTreeWithStats,
+	type ITelemetryContext,
+} from "@fluidframework/runtime-definitions/internal";
+import { type ErasedType } from "@fluidframework/core-interfaces";
 
+import { type ISharedObjectEvents } from "./events.js";
+import { type IFluidSerializer } from "./serializer.js";
+import { type ISharedObject } from "./types.js";
 import { SharedObjectHandle } from "./handle.js";
-import { FluidSerializer, IFluidSerializer } from "./serializer.js";
-import { SummarySerializer } from "./summarySerializer.js";
-import { ISharedObject, ISharedObjectEvents } from "./types.js";
-import { makeHandlesSerializable, parseHandles } from "./utils.js";
+// Added import for ChannelAttachBroker
+import { ChannelAttachBroker } from "@fluidframework/datastore-definitions/internal";
 
 /**
  * Custom telemetry properties used in {@link SharedObjectCore} to instantiate {@link TelemetryEventBatcher} class.
@@ -92,7 +94,13 @@ export abstract class SharedObjectCore<
 	/**
 	 * The handle referring to this SharedObject
 	 */
-	public readonly handle: IFluidHandleInternal;
+	public readonly handle: IFluidHandleInternal; // Keep as IFluidHandleInternal for broader compatibility
+
+	/**
+	 * The broker managing the attachment state for this SharedObject.
+	 * @internal
+	 */
+	public readonly broker: ChannelAttachBroker;
 
 	/**
 	 * Telemetry logger for the shared object
@@ -142,40 +150,43 @@ export abstract class SharedObjectCore<
 			this.eventListenerErrorHandler(event, e),
 		);
 
-		assert(!id.includes("/"), 0x304 /* Id cannot contain slashes */);
+		assert(!id.includes("/"), 0x304 /* Channel ID contains slash */);
 
-		this.handle = new SharedObjectHandle(this, id, runtime.IFluidHandleContext);
-
-		this.logger = createChildLogger({
-			logger: runtime.logger,
-			properties: {
-				all: {
-					sharedObjectId: uuid(),
-					...tagCodeArtifacts({
-						ddsType: this.attributes.type,
-					}),
-				},
+		// Create the broker for this DDS before creating the handle
+		this.broker = new ChannelAttachBroker(
+			this, // The object itself
+			runtime, // The containing DataStore runtime
+			(sourceDataStore: IFluidDataStoreRuntime) => {
+				// attachFn: When attach is called on the broker, bind the DDS to the context
+				this.bindToContext();
+				// We might need to pass sourceDataStore info if bindToContext needs it? Currently doesn't.
 			},
-		});
-		this.mc = loggerToMonitoringContext(this.logger);
+			this.isAttached(), // Initial state - check if already attached via runtime
+		);
+
+		// Create the handle for this object. It will access the broker via the object itself.
+		this.handle = new SharedObjectHandle(this, this.id, this.runtime.objectsRoutingContext);
+
+		this.mc = loggerToMonitoringContext(
+			createChildLogger({ logger: this.runtime.logger, namespace: "SharedObject" }),
+		);
+		this.logger = this.mc.logger;
 
 		const { opProcessingHelper, callbacksHelper } = this.setUpSampledTelemetryHelpers();
 		this.opProcessingHelper = opProcessingHelper;
 		this.callbacksHelper = callbacksHelper;
 
-		const processMessagesCore = this.processMessagesCore?.bind(this);
 		this.processMessagesHelper =
-			processMessagesCore === undefined
-				? (messagesCollection: IRuntimeMessageCollection) =>
-						processHelper(messagesCollection, this.process.bind(this))
-				: (messagesCollection: IRuntimeMessageCollection) => {
+			this.processMessagesCore === undefined
+				? (messagesCollection) => processHelper(messagesCollection, this.process.bind(this))
+				: (messagesCollection) =>
 						processMessagesCoreHelper(
 							messagesCollection,
 							this.opProcessingHelper,
 							this.emitInternal.bind(this),
-							processMessagesCore,
+							// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+							this.processMessagesCore!.bind(this),
 						);
-					};
 	}
 
 	/**
@@ -317,15 +328,18 @@ export abstract class SharedObjectCore<
 	 * {@inheritDoc (ISharedObject:interface).bindToContext}
 	 */
 	public bindToContext(): void {
-		// ensure the method only runs once by removing the implementation
-		// without this the method suffers from re-entrancy issues
-		this.bindToContext = () => {};
-		if (!this._isBoundToContext) {
-			this.runtime.bindChannel(this);
-			// must set after bind channel so isAttached doesn't report true
-			// before binding is complete
-			this.setBoundAndHandleAttach();
+		if (this._isBoundToContext) {
+			return;
 		}
+		this.verifyNotClosed();
+		this.runtime.bindChannel(this);
+		this._isBoundToContext = true;
+
+		// Notify the broker that the object is now attached *after* binding succeeds.
+		// This ensures the broker's state reflects the actual binding.
+		this.broker.setAttached();
+
+		this.setBoundAndHandleAttach();
 	}
 
 	/**
@@ -346,7 +360,10 @@ export abstract class SharedObjectCore<
 	 * {@inheritDoc @fluidframework/datastore-definitions#(IChannel:interface).isAttached}
 	 */
 	public isAttached(): boolean {
-		return this._isBoundToContext && this.runtime.attachState !== AttachState.Detached;
+		// The object is considered attached if it's known by the runtime.
+		// This is used for the broker's initial state.
+		// The broker's `isAttached` property becomes the source of truth after initialization.
+		return this.runtime.getChannel(this.id) !== undefined;
 	}
 
 	/**
