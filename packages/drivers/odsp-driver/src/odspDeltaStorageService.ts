@@ -157,6 +157,7 @@ export class OdspDeltaStorageWithCache implements IDocumentDeltaStorageService {
 		private readonly storageManagerGetter: () => OdspDocumentStorageService | undefined,
 	) {}
 
+	//*  Down to addRequestCore
 	public fetchMessages(
 		fromTotal: number,
 		toTotal: number | undefined,

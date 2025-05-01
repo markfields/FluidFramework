@@ -714,6 +714,7 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
 				controller.abort(this.closeAbortController.signal.reason),
 			);
 
+			//* down to addRequestCore
 			const stream = this.deltaStorage.fetchMessages(
 				from, // inclusive
 				to, // exclusive
@@ -724,6 +725,7 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
 
 			// eslint-disable-next-line no-constant-condition
 			while (true) {
+				//* Abort if closed...? rationalize with abort controller
 				const result = await stream.read();
 				if (result.done) {
 					break;
@@ -735,6 +737,14 @@ export class DeltaManager<TConnectionManager extends IConnectionManager>
 					opsFromFetch = false;
 				}
 			}
+		} catch (error) {
+			//* Maybe...?
+			if ((error as Error).message === "TypeError: Failed to fetch" && this._closed) {
+				throw new NonRetryableError("Closed while fetching deltas", "", {
+					driverVersion: undefined,
+				});
+			}
+			throw error;
 		} finally {
 			if (controller.signal.aborted) {
 				this.logger.sendTelemetryEvent({

@@ -1675,6 +1675,7 @@ export class Container
 
 		timings.phase2 = performanceNow();
 
+		//* Probably from here (down to getVersions etc)
 		// Fetch specified snapshot.
 		const { baseSnapshot, version } =
 			await this.serializedStateManager.fetchSnapshot(specifiedVersion);

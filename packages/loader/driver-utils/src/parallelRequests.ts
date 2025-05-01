@@ -191,6 +191,7 @@ export class ParallelRequests<T> {
 		this.addRequestCore(chunk.from, chunk.to).catch(this.fail.bind(this));
 	}
 
+	//* up to DeltaManager
 	private async addRequestCore(fromArg: number, toArg: number) {
 		assert(this.working, 0x10a /* "cannot add parallel request while not working" */);
 

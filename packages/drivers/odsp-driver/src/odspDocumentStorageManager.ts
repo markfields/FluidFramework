@@ -457,6 +457,7 @@ export class OdspDocumentStorageService extends OdspDocumentStorageServiceBase {
 		return { snapshot: odspSnapshotCacheValue, id };
 	}
 
+	//* From container load
 	public async getVersions(
 		// eslint-disable-next-line @rushstack/no-new-null
 		blobid: string | null,
@@ -565,6 +566,7 @@ export class OdspDocumentStorageService extends OdspDocumentStorageServiceBase {
 		});
 	}
 
+	//* under getVersions and getSnapshot
 	private async fetchSnapshotFromNetworkCore(
 		hostSnapshotOptions: ISnapshotOptions | undefined,
 		loadingGroupIds: string[] | undefined,
