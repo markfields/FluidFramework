@@ -377,12 +377,10 @@ export class Outbox {
 			return;
 		}
 
-		// Don't use resubmittingBatchId for idAllocationBatch.
-		// ID Allocation messages are not directly resubmitted so don't pass the resubmitInfo
+		// Don't pass resubmitInfo for idAllocationBatch since ID Allocation messages are not directly resubmitted
+		// We ignore these batches when tracking Batch ID and never stage them.
 		this.flushInternal({
 			batchManager: this.idAllocationBatch,
-			// Note: For now, we will never stage ID Allocation messages.
-			// They won't contain personal info and no harm in extra allocations in case of discarding the staged changes
 		});
 		this.flushInternal({
 			batchManager: this.blobAttachBatch,

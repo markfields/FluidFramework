@@ -16,6 +16,7 @@ import Deque from "double-ended-queue";
 import { v4 as uuid } from "uuid";
 
 import {
+	ContainerMessageType,
 	type InboundContainerRuntimeMessage,
 	type InboundSequencedContainerRuntimeMessage,
 	type LocalContainerRuntimeMessage,
@@ -751,7 +752,14 @@ export class PendingStateManager implements IDisposable {
 			// Re-queue pre-staging messages if we are only processing staged batches
 			if (onlyStagedBatches) {
 				if (!pendingMessage.batchInfo.staged) {
-					assert(!seenStagedBatch, 0xb86 /* Staged batch was followed by non-staged batch */);
+					// Interleaved ID Allocation messages are not staged, and should be re-queued.
+					// This reordering here is ok - ID Allocation messages can always be processed sooner
+					// relative to other messages (and order within ID Allocation messages will be preserved here).
+					assert(
+						pendingMessage.runtimeOp?.type === ContainerMessageType.IdAllocation ||
+							!seenStagedBatch,
+						0xb86 /* Staged batch was followed by non-staged batch */,
+					);
 					this.pendingMessages.push(pendingMessage);
 					continue;
 				}
