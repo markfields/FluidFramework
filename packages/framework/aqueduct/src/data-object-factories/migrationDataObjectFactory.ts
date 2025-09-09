@@ -26,9 +26,9 @@ import type { IDelayLoadChannelFactory } from "../channel-factories/index.js";
 import type {
 	DataObjectTypes,
 	IDataObjectProps,
-	MigrationDataObject,
 	ModelDescriptor,
 } from "../data-objects/index.js";
+import { PureDataObject } from "../data-objects/index.js";
 
 import {
 	PureDataObjectFactory,
@@ -42,24 +42,31 @@ import {
  * @alpha
  */
 export interface MigrationDataObjectFactoryProps<
-	TObj extends MigrationDataObject<TUniversalView, I>,
+	// Returned object type (must extend PureDataObject via base factory generic constraint, but not a special Migration class)
+	TObj extends PureDataObject<I>,
+	// Public interface / view type that callers program against (may be union implemented by different concrete classes)
 	TUniversalView,
 	I extends DataObjectTypes = DataObjectTypes,
-	TNewModel extends TUniversalView = TUniversalView, // default case works for a single model descriptor
-	TMigrationData = never, // default case works for a single model descriptor (migration is not needed)
-> extends DataObjectFactoryProps<TObj, I> {
+	TNewModel extends TUniversalView = TUniversalView,
+	TMigrationData = never,
+> extends Omit<DataObjectFactoryProps<TObj, I>, "ctor"> {
 	/**
-	 * The constructor for the data object, which must also include static `modelDescriptors` property.
+	 * Full ordered list of model descriptors. First descriptor is the target/new (creation) model.
 	 */
-	ctor: (new (
+	readonly modelDescriptors: readonly [
+		ModelDescriptor<TNewModel>,
+		...ModelDescriptor<TUniversalView>[],
+	];
+
+	/**
+	 * Given the selected descriptor (either probed existing or creation target), return the constructor
+	 * to instantiate. Typically maps descriptor identity to a concrete PureDataObject subclass.
+	 */
+	readonly selectCtor: (
+		descriptor: ModelDescriptor<TUniversalView>,
+	) => new (
 		props: IDataObjectProps<I>,
-	) => TObj) & {
-		//* TODO: Add type alias for this array type
-		modelDescriptors: readonly [
-			ModelDescriptor<TNewModel>,
-			...ModelDescriptor<TUniversalView>[],
-		];
-	};
+	) => TObj;
 
 	/**
 	 * Used for determining whether or not a migration can be performed based on providers and/or feature gates.
@@ -129,11 +136,11 @@ export interface MigrationDataObjectFactoryProps<
  * @alpha
  */
 export class MigrationDataObjectFactory<
-	TObj extends MigrationDataObject<TUniversalView, I>,
+	TObj extends PureDataObject<I>,
 	TUniversalView,
 	I extends DataObjectTypes = DataObjectTypes,
-	TNewModel extends TUniversalView = TUniversalView, // default case works for a single model descriptor
-	TMigrationData = never, // default case works for a single model descriptor (migration is not needed)
+	TNewModel extends TUniversalView = TUniversalView,
+	TMigrationData = never,
 > extends PureDataObjectFactory<TObj, I> {
 	private migrateLock = false;
 
@@ -169,8 +176,7 @@ export class MigrationDataObjectFactory<
 			this.migrateLock = true;
 
 			try {
-				// Read the model descriptors from the DataObject ctor (single source of truth).
-				const modelDescriptors = this.props.ctor.modelDescriptors;
+				const modelDescriptors = this.props.modelDescriptors;
 
 				// Destructure the target/first descriptor and probe it first. If it's present,
 				// the object already uses the target model and we're done.
@@ -230,7 +236,7 @@ export class MigrationDataObjectFactory<
 			alwaysLoaded: Map<string, IChannelFactory>;
 			delayLoaded: Map<string, IDelayLoadChannelFactory>;
 			// eslint-disable-next-line unicorn/no-array-reduce
-		} = props.ctor.modelDescriptors.reduce(
+		} = props.modelDescriptors.reduce(
 			(acc, curr) => {
 				for (const factory of curr.sharedObjects.alwaysLoaded ?? []) {
 					acc.alwaysLoaded.set(factory.type, factory);
@@ -258,9 +264,18 @@ export class MigrationDataObjectFactory<
 			}
 		}
 
+		//* Placeholder ctor until dynamic selection logic implemented.
+		const PlaceholderCtor = class extends PureDataObject<I> {} as unknown as new (
+			p: IDataObjectProps<I>,
+		) => TObj;
+
+		//* Why stop spreading props?
 		super({
-			...props,
+			type: props.type,
+			ctor: PlaceholderCtor,
 			sharedObjects,
+			optionalProviders: props.optionalProviders,
+			registryEntries: props.registryEntries,
 			afterBindRuntime: fullMigrateDataObject,
 			runtimeClass: class MigratorDataStoreRuntime extends runtimeClass {
 				private migrationOpSeqNum = -1;
