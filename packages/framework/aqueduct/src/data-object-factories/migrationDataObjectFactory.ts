@@ -156,8 +156,9 @@ export class MigrationDataObjectFactory<
 			TMigrationData
 		>,
 	) {
-		// Aggregate shared objects from all descriptors plus user-specified sharedObjects.
 		const runtimeClass = props.runtimeClass ?? FluidDataStoreRuntime;
+
+		// Aggregate shared objects from all descriptors plus user-specified sharedObjects.
 		//* TODO: Maybe we don't need to split by delay-loaded here (and in ModelDescriptor type)
 		const aggregated = [...(props.sharedObjects ?? [])];
 		const allFactories: {
@@ -186,7 +187,9 @@ export class MigrationDataObjectFactory<
 				aggregated.push(f);
 			}
 		}
+
 		// Placeholder ctor not used; real instantiation handled in override.
+		//* TODO: Would be nice to throw if it's used as-is
 		const PlaceholderCtor = class extends PureDataObject<I> {} as unknown as new (
 			p: IDataObjectProps<I>,
 		) => TObj;
