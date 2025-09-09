@@ -8,13 +8,12 @@ import { assert } from "@fluidframework/core-utils/internal";
 import {
 	DataStoreMessageType,
 	FluidDataStoreRuntime,
+	mixinRequestHandler,
 } from "@fluidframework/datastore/internal";
 import type { IChannelFactory } from "@fluidframework/datastore-definitions/internal";
 import type {
 	IFluidDataStoreChannel,
 	IFluidDataStoreContext,
-	IRuntimeMessageCollection,
-	IRuntimeMessagesContent,
 } from "@fluidframework/runtime-definitions/internal";
 import type {
 	AsyncFluidObjectProvider,
@@ -143,10 +142,11 @@ export class MigrationDataObjectFactory<
 	TMigrationData = never,
 > extends PureDataObjectFactory<TObj, I> {
 	private migrateLock = false;
+	private canPerformMigration: boolean | undefined;
+	private readonly sharedObjectRegistryMap: Map<string, IChannelFactory>;
 
 	// ! TODO: add new DataStoreMessageType.Conversion
 	private static readonly conversionContent = "conversion";
-
 	public constructor(
 		private readonly props: MigrationDataObjectFactoryProps<
 			TObj,
@@ -156,211 +156,178 @@ export class MigrationDataObjectFactory<
 			TMigrationData
 		>,
 	) {
-		const submitConversionOp = (runtime: FluidDataStoreRuntime): void => {
-			runtime.submitMessage(
-				DataStoreMessageType.ChannelOp,
-				MigrationDataObjectFactory.conversionContent,
-				undefined,
-			);
+		// Aggregate shared objects from all descriptors plus user-specified sharedObjects.
+		const runtimeClass = props.runtimeClass ?? FluidDataStoreRuntime;
+		//* TODO: Maybe we don't need to split by delay-loaded here (and in ModelDescriptor type)
+		const aggregated = [...(props.sharedObjects ?? [])];
+		const allFactories: {
+			alwaysLoaded: Map<string, IChannelFactory>;
+			delayLoaded: Map<string, IDelayLoadChannelFactory>;
+		} = {
+			alwaysLoaded: new Map<string, IChannelFactory>(),
+			delayLoaded: new Map<string, IDelayLoadChannelFactory>(),
 		};
-
-		const fullMigrateDataObject = async (runtime: IFluidDataStoreChannel): Promise<void> => {
-			assert(this.canPerformMigration !== undefined, "canPerformMigration should be defined");
-			const realRuntime = runtime as FluidDataStoreRuntime;
-			// Descriptor-driven migration flow (no backwards compatibility path)
-			if (!this.canPerformMigration || this.migrateLock) {
-				return;
+		for (const curr of props.modelDescriptors) {
+			for (const f of curr.sharedObjects.alwaysLoaded ?? []) {
+				allFactories.alwaysLoaded.set(f.type, f);
 			}
+			for (const f of curr.sharedObjects.delayLoaded ?? []) {
+				allFactories.delayLoaded.set(f.type, f);
+			}
+		}
+		for (const f of allFactories.alwaysLoaded.values()) {
+			if (!aggregated.some((x) => x.type === f.type)) {
+				// User did not register this factory
+				aggregated.push(f);
+			}
+		}
+		for (const f of allFactories.delayLoaded.values()) {
+			if (!aggregated.some((x) => x.type === f.type)) {
+				aggregated.push(f);
+			}
+		}
+		// Placeholder ctor not used; real instantiation handled in override.
+		const PlaceholderCtor = class extends PureDataObject<I> {} as unknown as new (
+			p: IDataObjectProps<I>,
+		) => TObj;
+		super({
+			type: props.type,
+			ctor: PlaceholderCtor,
+			sharedObjects: aggregated,
+			optionalProviders: props.optionalProviders,
+			registryEntries: props.registryEntries,
+			runtimeClass,
+			policies: props.policies,
+		});
+		this.sharedObjectRegistryMap = new Map(aggregated.map((f) => [f.type, f]));
+	}
 
-			//* Should this move down a bit lower, to have less code in the lock zone?
-			this.migrateLock = true;
+	public override async instantiateDataStore(
+		context: IFluidDataStoreContext,
+		existing: boolean,
+	): Promise<IFluidDataStoreChannel> {
+		// Compute migration eligibility if not yet done (mirrors observeCreateDataObject behavior)
+		const scope: FluidObject<IFluidDependencySynthesizer> = context.scope;
+		if (this.canPerformMigration === undefined) {
+			const providersSynth =
+				scope.IFluidDependencySynthesizer?.synthesize<I["OptionalProviders"]>(
+					(this.props.optionalProviders as FluidObjectSymbolProvider<
+						I["OptionalProviders"]
+					>) ?? {},
+					{},
+					// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+				) ?? ({} as AsyncFluidObjectProvider<never>);
+			this.canPerformMigration = await this.props.canPerformMigration(providersSynth);
+		}
 
-			try {
-				const modelDescriptors = this.props.modelDescriptors;
+		// Build providers (copy from createDataObject helper in base)
+		const providers =
+			scope.IFluidDependencySynthesizer?.synthesize<I["OptionalProviders"]>(
+				(this.props.optionalProviders as FluidObjectSymbolProvider<I["OptionalProviders"]>) ??
+					{},
+				{},
+			) ??
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+			({} as AsyncFluidObjectProvider<never>);
 
-				// Destructure the target/first descriptor and probe it first. If it's present,
-				// the object already uses the target model and we're done.
-				const [targetDescriptor, ...otherDescriptors] = modelDescriptors;
-				//* TODO: Wrap error here with a proper error type?
-				const maybeTarget = await targetDescriptor.probe(realRuntime);
-				if (maybeTarget !== undefined) {
-					// Already on target model; nothing to do.
-					return;
-				}
-				// Download the code in parallel with async operations happening on the existing model
-				const targetFactoriesP = targetDescriptor.ensureFactoriesLoaded();
+		// We do not have direct runtimeClass property exposed; use provided runtimeClass from props or default.
+		const runtimeClass = this.props.runtimeClass ?? FluidDataStoreRuntime;
 
-				// Find the first model that probes successfully.
-				let existingModel: TUniversalView | undefined;
+		// Wrap runtime class with request handler mixin replicating base behavior.
+		const mixedRuntimeClass = mixinRequestHandler(
+			async (request, rt: FluidDataStoreRuntime) => {
+				const inst = (await rt.entryPoint.get()) as TObj;
+				assert(inst.request !== undefined, 0x795);
+				return inst.request(request);
+			},
+			runtimeClass,
+		);
+
+		// Instance will be assigned once ctor chosen
+		// eslint-disable-next-line prefer-const
+		let instance: TObj | undefined; // allow single assignment post selection
+		const runtime = new mixedRuntimeClass(
+			context,
+			new Map(this.sharedObjectRegistryMap),
+			existing,
+			async () => {
+				assert(instance !== undefined, 0x46a);
+				await instance.finishInitialization(true);
+				return instance;
+			},
+			this.props.policies,
+		);
+
+		const [targetDescriptor, ...otherDescriptors] = this.props.modelDescriptors;
+		let chosenDescriptor: ModelDescriptor<TUniversalView> | ModelDescriptor<TNewModel> =
+			targetDescriptor;
+		let existingDescriptor: ModelDescriptor<TUniversalView> | undefined;
+		let existingModelView: TUniversalView | undefined;
+
+		if (existing) {
+			// Probe for existing descriptor
+			const maybeTarget = await targetDescriptor.probe(runtime).catch(() => undefined);
+			if (maybeTarget) {
+				existingDescriptor = targetDescriptor;
+				existingModelView = maybeTarget;
+			} else {
 				for (const desc of otherDescriptors) {
-					//* Should probe errors be fatal?
-					existingModel = await desc.probe(realRuntime).catch(() => undefined);
-					if (existingModel !== undefined) {
+					const maybe = await desc.probe(runtime).catch(() => undefined);
+					if (maybe !== undefined) {
+						existingDescriptor = desc;
+						existingModelView = maybe;
 						break;
 					}
 				}
 				assert(
-					existingModel !== undefined,
+					existingDescriptor !== undefined && existingModelView !== undefined,
 					"Unable to match runtime structure to any known data model",
 				);
-
-				// Retrieve any async data required for migration using the discovered existing model (may be undefined)
-				// In parallel, we are waiting for the target factories to load
-				const data = await this.props.asyncGetDataForMigration(existingModel);
-				await targetFactoriesP;
-
-				// ! TODO: ensure these ops aren't sent immediately AB#41625
-				submitConversionOp(realRuntime);
-
-				// Create the target model and run migration.
-				const newModel = targetDescriptor.create(realRuntime);
-
-				// Call consumer-provided migration implementation
-				this.props.migrateDataObject(realRuntime, newModel, data);
-
-				//* TODO: evacuate old model
-				//* i.e. delete unused root contexts, but not only that.  GC doesn't run sub-DataStore.
-				//* So we will need to plumb through now-unused channels to here.  Can be a follow-up.
-			} finally {
-				this.migrateLock = false;
 			}
-		};
 
-		const runtimeClass = props.runtimeClass ?? FluidDataStoreRuntime;
-
-		// Shallow copy since the input array is typed as a readonly array
-		const sharedObjects = [...(props.sharedObjects ?? [])];
-
-		//* TODO: Maybe we don't need to split by delay-loaded here (and in ModelDescriptor type)
-		const allFactories: {
-			alwaysLoaded: Map<string, IChannelFactory>;
-			delayLoaded: Map<string, IDelayLoadChannelFactory>;
-			// eslint-disable-next-line unicorn/no-array-reduce
-		} = props.modelDescriptors.reduce(
-			(acc, curr) => {
-				for (const factory of curr.sharedObjects.alwaysLoaded ?? []) {
-					acc.alwaysLoaded.set(factory.type, factory);
-				}
-				for (const factory of curr.sharedObjects.delayLoaded ?? []) {
-					acc.delayLoaded.set(factory.type, factory);
-				}
-				return acc;
-			},
-			{
-				alwaysLoaded: new Map<string, IChannelFactory>(),
-				delayLoaded: new Map<string, IDelayLoadChannelFactory>(),
-			},
-		);
-		for (const factory of allFactories.alwaysLoaded.values()) {
-			if (!sharedObjects.some((f) => f.type === factory.type)) {
-				// User did not register this factory
-				sharedObjects.push(factory);
-			}
-		}
-		for (const factory of allFactories.delayLoaded.values()) {
-			if (!sharedObjects.some((f) => f.type === factory.type)) {
-				// User did not register this factory
-				sharedObjects.push(factory);
-			}
-		}
-
-		//* Placeholder ctor until dynamic selection logic implemented.
-		const PlaceholderCtor = class extends PureDataObject<I> {} as unknown as new (
-			p: IDataObjectProps<I>,
-		) => TObj;
-
-		//* Why stop spreading props?
-		super({
-			type: props.type,
-			ctor: PlaceholderCtor,
-			sharedObjects,
-			optionalProviders: props.optionalProviders,
-			registryEntries: props.registryEntries,
-			afterBindRuntime: fullMigrateDataObject,
-			runtimeClass: class MigratorDataStoreRuntime extends runtimeClass {
-				private migrationOpSeqNum = -1;
-				private readonly seqNumsToSkip = new Set<number>();
-
-				public processMessages(messageCollection: IRuntimeMessageCollection): void {
-					let contents: IRuntimeMessagesContent[] = [];
-					const sequenceNumber = messageCollection.envelope.sequenceNumber;
-
-					// ! TODO: add loser validation AB#41626
-					if (
-						// eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
-						messageCollection.envelope.type === DataStoreMessageType.ChannelOp &&
-						messageCollection.messagesContent.some(
-							(val) => val.contents === MigrationDataObjectFactory.conversionContent,
-						)
-					) {
-						if (this.migrationOpSeqNum === -1) {
-							// This is the first migration op we've seen
-							this.migrationOpSeqNum = sequenceNumber;
-						} else {
-							// Skip seqNums that lost the race
-							this.seqNumsToSkip.add(sequenceNumber);
-						}
+			// Decide on migration
+			if (
+				this.canPerformMigration &&
+				existingDescriptor !== targetDescriptor &&
+				!this.migrateLock
+			) {
+				this.migrateLock = true;
+				try {
+					const targetFactoriesP = targetDescriptor.ensureFactoriesLoaded();
+					if (existingModelView === undefined) {
+						throw new Error("Existing model view disappeared during migration");
 					}
-
-					contents = messageCollection.messagesContent.filter(
-						(val) => val.contents !== MigrationDataObjectFactory.conversionContent,
+					const data = await this.props.asyncGetDataForMigration(existingModelView);
+					await targetFactoriesP;
+					runtime.submitMessage(
+						DataStoreMessageType.ChannelOp,
+						MigrationDataObjectFactory.conversionContent,
+						undefined,
 					);
-
-					if (this.seqNumsToSkip.has(sequenceNumber) || contents.length === 0) {
-						return;
-					}
-
-					super.processMessages({
-						...messageCollection,
-						messagesContent: contents,
-					});
+					// Create channels for target model
+					const newModel = targetDescriptor.create(runtime);
+					this.props.migrateDataObject(runtime, newModel, data);
+					chosenDescriptor = targetDescriptor;
+				} finally {
+					this.migrateLock = false;
 				}
-
-				public reSubmit(
-					type: DataStoreMessageType,
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					content: any,
-					localOpMetadata: unknown,
-				): void {
-					if (
-						type === DataStoreMessageType.ChannelOp &&
-						content === MigrationDataObjectFactory.conversionContent
-					) {
-						submitConversionOp(this);
-						return;
-					}
-					super.reSubmit(type, content, localOpMetadata);
+			} else {
+				if (existingDescriptor !== undefined) {
+					chosenDescriptor = existingDescriptor;
 				}
-
-				//* TODO: Replace with generic "evacuate" function on ModelDescriptor
-				public removeRoot(): void {
-					//* this.contexts.delete(dataObjectRootDirectoryId);
-				}
-			},
-		});
-	}
-
-	private canPerformMigration: boolean | undefined;
-
-	/**
-	 * ! TODO
-	 * @remarks Assumption is that the IFluidDataStoreContext will remain constant for the lifetime of a given MigrationDataObjectFactory instance
-	 */
-	protected override async observeCreateDataObject(createProps: {
-		context: IFluidDataStoreContext;
-		optionalProviders: FluidObjectSymbolProvider<I["OptionalProviders"]>;
-	}): Promise<void> {
-		if (this.canPerformMigration === undefined) {
-			const scope: FluidObject<IFluidDependencySynthesizer> = createProps.context.scope;
-			const providers =
-				scope.IFluidDependencySynthesizer?.synthesize<I["OptionalProviders"]>(
-					createProps.optionalProviders,
-					{},
-				) ??
-				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-				({} as AsyncFluidObjectProvider<never>);
-
-			this.canPerformMigration = await this.props.canPerformMigration(providers);
+			}
+		} else {
+			await targetDescriptor.ensureFactoriesLoaded();
+			targetDescriptor.create(runtime); // Create initial model structure
+			chosenDescriptor = targetDescriptor;
 		}
+
+		// Instantiate concrete data object for chosen descriptor
+		const Ctor = this.props.selectCtor(chosenDescriptor as ModelDescriptor<TUniversalView>);
+		instance = new Ctor({ runtime, context, providers, initProps: undefined });
+		if (!existing) {
+			await instance.finishInitialization(false);
+		}
+		return runtime;
 	}
 }
