@@ -8,7 +8,6 @@ import { assert } from "@fluidframework/core-utils/internal";
 import {
 	DataStoreMessageType,
 	FluidDataStoreRuntime,
-	mixinRequestHandler,
 } from "@fluidframework/datastore/internal";
 import type { IChannelFactory } from "@fluidframework/datastore-definitions/internal";
 import type {
@@ -32,6 +31,7 @@ import { PureDataObject } from "../data-objects/index.js";
 import {
 	PureDataObjectFactory,
 	type DataObjectFactoryProps,
+	buildRuntimeWithRequestHandler,
 } from "./pureDataObjectFactory.js";
 
 /**
@@ -258,33 +258,18 @@ export class MigrationDataObjectFactory<
 			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
 			({} as AsyncFluidObjectProvider<never>);
 
-		// We do not have direct runtimeClass property exposed; use provided runtimeClass from props or default.
-		const runtimeClass = this.props.runtimeClass ?? FluidDataStoreRuntime;
-
-		// Wrap runtime class with request handler mixin replicating base behavior.
-		const mixedRuntimeClass = mixinRequestHandler(
-			async (request, rt: FluidDataStoreRuntime) => {
-				const inst = (await rt.entryPoint.get()) as TObj;
-				assert(inst.request !== undefined, 0x795);
-				return inst.request(request);
-			},
-			runtimeClass,
-		);
-
-		// Instance will be assigned once ctor chosen
-		// eslint-disable-next-line prefer-const
-		let instance: TObj | undefined; // allow single assignment post selection
-		const runtime = new mixedRuntimeClass(
+		// Build runtime via shared helper; instance captured via closure below.
+		// eslint-disable-next-line prefer-const -- assigned post ctor selection via closure
+		let instance: TObj | undefined; // assigned after ctor selection
+		const runtime = buildRuntimeWithRequestHandler<TObj>({
 			context,
-			new Map(this.sharedObjectRegistryMap),
+			sharedObjectRegistry: new Map(this.sharedObjectRegistryMap),
 			existing,
-			async () => {
-				assert(instance !== undefined, 0x46a);
-				await instance.finishInitialization(true);
-				return instance;
-			},
-			this.props.policies,
-		);
+			policies: this.props.policies,
+			runtimeClassArg: this.props.runtimeClass ?? FluidDataStoreRuntime,
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+			getInstance: () => instance!,
+		});
 
 		const [targetDescriptor, ...otherDescriptors] = this.props.modelDescriptors;
 		let chosenDescriptor: ModelDescriptor<TUniversalView> | ModelDescriptor<TNewModel> =
@@ -339,8 +324,8 @@ export class MigrationDataObjectFactory<
 			chosenDescriptor = targetDescriptor;
 		}
 
-		const Ctor = this.props.selectCtor(chosenDescriptor as ModelDescriptor<TUniversalView>);
-		instance = new Ctor({ runtime, context, providers, initProps: undefined });
+		const ctor = this.props.selectCtor(chosenDescriptor as ModelDescriptor<TUniversalView>);
+		instance = new ctor({ runtime, context, providers, initProps: undefined });
 		// Only call finishInitialization for new objects now; existing deferred until entryPoint get() (same as base)
 		if (!existing) {
 			await instance.finishInitialization(false);
@@ -354,7 +339,7 @@ export class MigrationDataObjectFactory<
 			planMigration,
 			alreadyCreatedModel: !existing,
 			migrationData,
-			ctor: Ctor,
+			ctor,
 		});
 
 		return runtime;

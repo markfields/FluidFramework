@@ -5,17 +5,14 @@
 
 import { FluidDataStoreRegistry } from "@fluidframework/container-runtime/internal";
 import type { IContainerRuntime } from "@fluidframework/container-runtime-definitions/internal";
-import type { FluidObject, IRequest } from "@fluidframework/core-interfaces";
+import type { FluidObject, IRequest, IResponse } from "@fluidframework/core-interfaces";
 import { assert } from "@fluidframework/core-utils/internal";
 import {
 	FluidDataStoreRuntime,
 	type ISharedObjectRegistry,
 	mixinRequestHandler,
 } from "@fluidframework/datastore/internal";
-import type {
-	IChannelFactory,
-	IFluidDataStoreRuntime,
-} from "@fluidframework/datastore-definitions/internal";
+import type { IChannelFactory } from "@fluidframework/datastore-definitions/internal";
 import type {
 	IContainerRuntimeBase,
 	IDataStore,
@@ -63,6 +60,52 @@ export interface CreateDataObjectProps<
  * Proxy over PureDataObject
  * Does delayed creation & initialization of PureDataObject
  */
+/**
+ * Shared internal helper to build a FluidDataStoreRuntime with a request handler mixin and deferred entryPoint resolution.
+ * Consumers supply a getInstance callback that returns the data object instance (constructed either immediately or later).
+ * finishInitialization(true) will be invoked the first time entryPoint.get() is resolved (matching prior semantics).
+ *
+ * This enables MigrationDataObjectFactory to reuse the core runtime setup logic without duplicating code.
+ */
+export function buildRuntimeWithRequestHandler<TObj extends PureDataObject>(params: {
+	context: IFluidDataStoreContext;
+	sharedObjectRegistry: ISharedObjectRegistry;
+	existing: boolean;
+	policies?: Partial<IFluidDataStorePolicies>;
+	runtimeClassArg: typeof FluidDataStoreRuntime;
+	getInstance: () => TObj; // (instance may technically be undefined until factory sets it)
+}): FluidDataStoreRuntime {
+	let runtimeClass = params.runtimeClassArg;
+	runtimeClass = mixinRequestHandler(
+		async (request: IRequest, runtimeArg: FluidDataStoreRuntime): Promise<IResponse> => {
+			const dataObject = (await runtimeArg.entryPoint.get()) as TObj & {
+				request?: (r: IRequest) => Promise<IResponse> | IResponse;
+			};
+			assert(
+				dataObject.request !== undefined,
+				0x795 /* Data store runtime entryPoint does not have request */,
+			);
+			return dataObject.request(request);
+		},
+		runtimeClass,
+	);
+	return new runtimeClass(
+		params.context,
+		params.sharedObjectRegistry,
+		params.existing,
+		async () => {
+			const inst = params.getInstance();
+			assert(inst !== undefined, 0x46a /* entryPoint is undefined */);
+			// Calling finishInitialization here like PureDataObject.getDataObject did, to keep the same behavior,
+			// since accessing the runtime's entryPoint is how we want the data object to be retrieved going forward.
+			// Without this I ran into issues with the load-existing flow not working correctly.
+			await inst.finishInitialization(true);
+			return inst;
+		},
+		params.policies,
+	);
+}
+
 async function createDataObject<
 	TObj extends PureDataObject,
 	I extends DataObjectTypes = DataObjectTypes,
@@ -79,41 +122,20 @@ async function createDataObject<
 	instance: TObj;
 	runtime: FluidDataStoreRuntime;
 }> {
-	// base
-	let runtimeClass = runtimeClassArg;
-
-	// request mixin in
-	runtimeClass = mixinRequestHandler(
-		async (request: IRequest, runtimeArg: FluidDataStoreRuntime) => {
-			// The provideEntryPoint callback below always returns TObj, so this cast is safe
-			const dataObject = (await runtimeArg.entryPoint.get()) as TObj;
-			assert(
-				dataObject.request !== undefined,
-				0x795 /* Data store runtime entryPoint does not have request */,
-			);
-			return dataObject.request(request);
-		},
-		runtimeClass,
-	);
-
 	// Create a new runtime for our data store, as if via new FluidDataStoreRuntime,
 	// but using the runtimeClass that's been augmented with mixins
 	// The runtime is what Fluid uses to create DDS' and route to your data store
-	const runtime: FluidDataStoreRuntime = new runtimeClass(
-		// calls new FluidDataStoreRuntime(...)
+	// eslint-disable-next-line prefer-const -- reassigned after construction for entryPoint resolution
+	let instance: TObj | undefined; // assigned after construction
+	const runtime = buildRuntimeWithRequestHandler<TObj>({
 		context,
 		sharedObjectRegistry,
 		existing,
-		async (rt: IFluidDataStoreRuntime) => {
-			assert(instance !== undefined, 0x46a /* entryPoint is undefined */);
-			// Calling finishInitialization here like PureDataObject.getDataObject did, to keep the same behavior,
-			// since accessing the runtime's entryPoint is how we want the data object to be retrieved going forward.
-			// Without this I ran into issues with the load-existing flow not working correctly.
-			await instance.finishInitialization(true);
-			return instance;
-		} /* provideEntryPoint */,
 		policies,
-	);
+		runtimeClassArg,
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		getInstance: () => instance!, //* Hmmmm
+	});
 
 	// Create object right away.
 	// This allows object to register various callbacks with runtime before runtime
@@ -129,7 +151,7 @@ async function createDataObject<
 		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
 		({} as AsyncFluidObjectProvider<never>);
 
-	const instance = new ctor({ runtime, context, providers, initProps });
+	instance = new ctor({ runtime, context, providers, initProps });
 
 	// if it's a newly created object, we need to wait for it to finish initialization
 	// as that results in creation of DDSes, before it gets attached, providing atomic
@@ -141,7 +163,7 @@ async function createDataObject<
 	// In the future, we should address it by using relative paths for handles and be able to resolve
 	// local DDSes while data store is not fully initialized.
 	if (!existing) {
-		await instance.finishInitialization(existing);
+		await instance.finishInitialization(false);
 	}
 
 	return { instance, runtime };
