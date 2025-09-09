@@ -145,6 +145,31 @@ export class MigrationDataObjectFactory<
 	private canPerformMigration: boolean | undefined;
 	private readonly sharedObjectRegistryMap: Map<string, IChannelFactory>;
 
+	/**
+	 * Stashed migration / instantiation decision keyed by data store runtime id (context.id).
+	 * We cannot run migration until after the runtime is bound (afterBindRuntime). So we record
+	 * what needs to happen here and execute later.
+	 */
+	private readonly pendingDecisions = new Map<
+		string,
+		{
+			readonly targetDescriptor: ModelDescriptor<TNewModel>;
+			readonly chosenDescriptor: ModelDescriptor<TUniversalView> | ModelDescriptor<TNewModel>;
+			readonly existingDescriptor?:
+				| ModelDescriptor<TUniversalView>
+				| ModelDescriptor<TNewModel>;
+			readonly existingModelView?: TUniversalView;
+			readonly planMigration: boolean;
+			readonly alreadyCreatedModel: boolean;
+			// Data captured asynchronously needed for migration (only if planMigration)
+			readonly migrationData?: TMigrationData;
+			// Constructor selected for creation
+			readonly ctor: new (
+				props: IDataObjectProps<I>,
+			) => TObj;
+		}
+	>();
+
 	// ! TODO: add new DataStoreMessageType.Conversion
 	private static readonly conversionContent = "conversion";
 	public constructor(
@@ -264,11 +289,16 @@ export class MigrationDataObjectFactory<
 		const [targetDescriptor, ...otherDescriptors] = this.props.modelDescriptors;
 		let chosenDescriptor: ModelDescriptor<TUniversalView> | ModelDescriptor<TNewModel> =
 			targetDescriptor;
-		let existingDescriptor: ModelDescriptor<TUniversalView> | undefined;
+		let existingDescriptor:
+			| ModelDescriptor<TUniversalView>
+			| ModelDescriptor<TNewModel>
+			| undefined;
 		let existingModelView: TUniversalView | undefined;
+		let planMigration = false;
+		let migrationData: TMigrationData | undefined;
 
 		if (existing) {
-			// Probe for existing descriptor
+			// Probe for existing descriptor only; no channel creation for new model yet.
 			const maybeTarget = await targetDescriptor.probe(runtime).catch(() => undefined);
 			if (maybeTarget) {
 				existingDescriptor = targetDescriptor;
@@ -287,50 +317,92 @@ export class MigrationDataObjectFactory<
 					"Unable to match runtime structure to any known data model",
 				);
 			}
-
-			// Decide on migration
 			if (
 				this.canPerformMigration &&
 				existingDescriptor !== targetDescriptor &&
 				!this.migrateLock
 			) {
-				this.migrateLock = true;
-				try {
-					const targetFactoriesP = targetDescriptor.ensureFactoriesLoaded();
-					if (existingModelView === undefined) {
-						throw new Error("Existing model view disappeared during migration");
-					}
-					const data = await this.props.asyncGetDataForMigration(existingModelView);
-					await targetFactoriesP;
-					runtime.submitMessage(
-						DataStoreMessageType.ChannelOp,
-						MigrationDataObjectFactory.conversionContent,
-						undefined,
-					);
-					// Create channels for target model
-					const newModel = targetDescriptor.create(runtime);
-					this.props.migrateDataObject(runtime, newModel, data);
-					chosenDescriptor = targetDescriptor;
-				} finally {
-					this.migrateLock = false;
+				planMigration = true;
+				// Pre-fetch migration data so actual migration (sync) is fast during afterBindRuntime.
+				if (existingModelView === undefined) {
+					throw new Error("Existing model view disappeared during migration planning");
 				}
+				migrationData = await this.props.asyncGetDataForMigration(existingModelView);
+				chosenDescriptor = targetDescriptor; // we will migrate
 			} else {
-				if (existingDescriptor !== undefined) {
-					chosenDescriptor = existingDescriptor;
-				}
+				chosenDescriptor = existingDescriptor ?? targetDescriptor;
 			}
 		} else {
+			// New: create model structure now (must exist before object initialization)
 			await targetDescriptor.ensureFactoriesLoaded();
-			targetDescriptor.create(runtime); // Create initial model structure
+			targetDescriptor.create(runtime);
 			chosenDescriptor = targetDescriptor;
 		}
 
-		// Instantiate concrete data object for chosen descriptor
 		const Ctor = this.props.selectCtor(chosenDescriptor as ModelDescriptor<TUniversalView>);
 		instance = new Ctor({ runtime, context, providers, initProps: undefined });
+		// Only call finishInitialization for new objects now; existing deferred until entryPoint get() (same as base)
 		if (!existing) {
 			await instance.finishInitialization(false);
 		}
+
+		this.pendingDecisions.set(context.id, {
+			targetDescriptor,
+			chosenDescriptor,
+			existingDescriptor,
+			existingModelView,
+			planMigration,
+			alreadyCreatedModel: !existing,
+			migrationData,
+			ctor: Ctor,
+		});
+
 		return runtime;
 	}
+
+	public override readonly afterBindRuntime = async (
+		channel: IFluidDataStoreChannel,
+	): Promise<void> => {
+		// Access context id via runtime (channel is FluidDataStoreRuntime here)
+		const runtime = channel as unknown as FluidDataStoreRuntime;
+		const contextId = runtime.id;
+		const decision = this.pendingDecisions.get(contextId);
+		if (!decision) {
+			return; // Nothing to do
+		}
+		this.pendingDecisions.delete(contextId);
+		const {
+			targetDescriptor,
+			chosenDescriptor,
+			planMigration,
+			migrationData,
+			alreadyCreatedModel,
+		} = decision;
+
+		if (planMigration) {
+			this.migrateLock = true;
+			try {
+				await targetDescriptor.ensureFactoriesLoaded();
+				// Submit conversion op signalling model change
+				runtime.submitMessage(
+					DataStoreMessageType.ChannelOp,
+					MigrationDataObjectFactory.conversionContent,
+					undefined,
+				);
+				const newModel = targetDescriptor.create(runtime);
+				if (migrationData !== undefined) {
+					this.props.migrateDataObject(runtime, newModel, migrationData);
+				}
+				if (this.props.refreshDataObject) {
+					await this.props.refreshDataObject();
+				}
+			} finally {
+				this.migrateLock = false;
+			}
+		} else if (chosenDescriptor === targetDescriptor && !alreadyCreatedModel) {
+			// Existing data store choosing target descriptor without migration (edge) create now
+			await targetDescriptor.ensureFactoriesLoaded();
+			targetDescriptor.create(runtime);
+		}
+	};
 }
