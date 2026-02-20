@@ -156,10 +156,12 @@
 			"unrs-resolver"
 		],
 		"overridesComments": [
-			"sharp <0.32.6 has a vulnerability that Component Governance flags (https://github.com/advisories/GHSA-54xq-cgqr-rpm3). It's a transitive dependency through jssm-viz-cli, which hasn't updated to a version with the fix"
+			"sharp <0.32.6 has a vulnerability that Component Governance flags (https://github.com/advisories/GHSA-54xq-cgqr-rpm3). It's a transitive dependency through jssm-viz-cli, which hasn't updated to a version with the fix",
+			"@rushstack/node-core-library is pinned to 5.19.1 due to an issue in the 5.20.0 release."
 		],
 		"overrides": {
-			"sharp": "^0.33.2"
+			"sharp": "^0.33.2",
+			"@rushstack/node-core-library": "5.19.1"
 		},
 		"patchedDependencies": {
 			"@microsoft/api-extractor@7.52.11": "../../../patches/@microsoft__api-extractor@7.52.11.patch"

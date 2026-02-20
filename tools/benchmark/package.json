@@ -69,8 +69,12 @@
 		"onlyBuiltDependencies": [
 			"unrs-resolver"
 		],
+		"overridesComments": [
+			"@rushstack/node-core-library is pinned to 5.19.1 due to an issue in the 5.20.0 release."
+		],
 		"overrides": {
-			"nanoid": "^3.3.9"
+			"nanoid": "^3.3.9",
+			"@rushstack/node-core-library": "5.19.1"
 		}
 	}
 }

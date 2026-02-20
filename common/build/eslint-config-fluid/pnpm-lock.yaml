@@ -6,6 +6,7 @@ settings:
 
 overrides:
   mocha>serialize-javascript@6.0.0: ^6.0.2
+  '@rushstack/node-core-library': 5.19.1
 
 importers:
 

@@ -129,8 +129,12 @@
 				"@types/node"
 			]
 		},
+		"overridesComments": [
+			"@rushstack/node-core-library is pinned to 5.19.1 due to an issue in the 5.20.0 release."
+		],
 		"overrides": {
-			"sharp": "^0.33.2"
+			"sharp": "^0.33.2",
+			"@rushstack/node-core-library": "5.19.1"
 		},
 		"patchedDependencies": {
 			"@microsoft/api-extractor@7.52.11": "../../../patches/@microsoft__api-extractor@7.52.11.patch"
