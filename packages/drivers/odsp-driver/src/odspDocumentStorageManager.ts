@@ -47,7 +47,7 @@ import type {
 	IVersionedValueWithEpoch,
 } from "./contracts.js";
 import { useCreateNewModule } from "./createFile/index.js";
-import type { EpochTracker } from "./epochTracker.js";
+import type { IEpochTracker } from "./epochTracker.js";
 import {
 	type ISnapshotRequestAndResponseOptions,
 	type SnapshotFormatSupportType,
@@ -111,7 +111,7 @@ export class OdspDocumentStorageService extends OdspDocumentStorageServiceBase {
 		private readonly fetchFullSnapshot: boolean,
 		private readonly cache: IOdspCache,
 		private readonly hostPolicy: HostStoragePolicyInternal,
-		private readonly epochTracker: EpochTracker,
+		private readonly epochTracker: IEpochTracker,
 		private readonly flushCallback: () => Promise<FlushResult>,
 		private readonly relayServiceTenantAndSessionId: () => string | undefined,
 		private readonly snapshotFormatFetchType?: SnapshotFormatSupportType,

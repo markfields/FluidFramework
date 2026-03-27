@@ -38,7 +38,7 @@ import {
 import { v4 as uuid } from "uuid";
 
 import { policyLabelsUpdatesSignalType } from "./contracts.js";
-import type { EpochTracker } from "./epochTracker.js";
+import type { IEpochTracker } from "./epochTracker.js";
 import type { IOdspCache } from "./odspCache.js";
 import { OdspDocumentDeltaConnection } from "./odspDocumentDeltaConnection.js";
 import {
@@ -96,7 +96,7 @@ export class OdspDelayLoadedDeltaStream {
 		private readonly mc: MonitoringContext,
 		private readonly cache: IOdspCache,
 		private readonly hostPolicy: HostStoragePolicy,
-		private readonly epochTracker: EpochTracker,
+		private readonly epochTracker: IEpochTracker,
 		private readonly opsReceived: (ops: ISequencedDocumentMessage[]) => void,
 		private readonly metadataUpdateHandler: (metadata: Record<string, string>) => void,
 		private readonly socketReferenceKeyPrefix?: string,

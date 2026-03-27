@@ -28,7 +28,7 @@ import type { Socket } from "socket.io-client";
 import { v4 as uuid } from "uuid";
 
 import type { IFlushOpsResponse, IGetOpsResponse, IOdspSocketError } from "./contracts.js";
-import type { EpochTracker } from "./epochTracker.js";
+import type { IEpochTracker } from "./epochTracker.js";
 import { errorObjectFromSocketError } from "./odspError.js";
 import { pkgVersion } from "./packageVersion.js";
 import { SocketIOClientStatic } from "./socketModule.js";
@@ -256,7 +256,7 @@ export class OdspDocumentDeltaConnection extends DocumentDeltaConnection {
 		url: string,
 		telemetryLogger: ITelemetryLoggerExt,
 		timeoutMs: number,
-		epochTracker: EpochTracker,
+		epochTracker: IEpochTracker,
 		socketReferenceKeyPrefix: string | undefined,
 		connectionId: string = uuid(),
 	): Promise<OdspDocumentDeltaConnection> {

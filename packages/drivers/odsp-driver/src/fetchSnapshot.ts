@@ -43,7 +43,7 @@ import {
 	persistedCacheValueVersion,
 } from "./contracts.js";
 import { ClpCompliantAppHeader } from "./contractsPublic.js";
-import type { EpochTracker } from "./epochTracker.js";
+import type { IEpochTracker } from "./epochTracker.js";
 import { getQueryString } from "./getQueryString.js";
 import { getHeadersWithAuth } from "./getUrlAndHeadersWithAuth.js";
 import { mockify } from "./mockify.js";
@@ -702,7 +702,7 @@ export const downloadSnapshot = mockify(
 		snapshotOptions: ISnapshotOptions | undefined,
 		snapshotFormatFetchType?: SnapshotFormatSupportType,
 		controller?: AbortController,
-		epochTracker?: EpochTracker,
+		epochTracker?: IEpochTracker,
 		scenarioName?: string,
 	): Promise<ISnapshotRequestAndResponseOptions> => {
 		// back-compat: This block to be removed with #8784 when we only consume/consider odsp resolvers that are >= 0.51

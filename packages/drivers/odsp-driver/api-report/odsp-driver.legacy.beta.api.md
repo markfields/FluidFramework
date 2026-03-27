@@ -19,40 +19,6 @@ export function createOdspUrl(l: OdspFluidDataStoreLocator): string;
 // @beta @legacy
 export function encodeOdspFluidDataStoreLocator(locator: OdspFluidDataStoreLocator): string;
 
-// @beta @legacy
-export class EpochTracker implements IPersistedFileCache {
-    constructor(cache: IPersistedCache, fileEntry: IFileEntry, logger: ITelemetryLoggerExt, clientIsSummarizer?: boolean | undefined);
-    // (undocumented)
-    protected readonly cache: IPersistedCache;
-    // (undocumented)
-    protected readonly clientIsSummarizer?: boolean | undefined;
-    fetch(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<Response>>;
-    fetchAndParseAsJSON<T>(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<T>>;
-    fetchArray(url: string, fetchOptions: {
-        [index: string]: RequestInit;
-    }, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<ArrayBuffer>>;
-    // (undocumented)
-    protected readonly fileEntry: IFileEntry;
-    // (undocumented)
-    get fluidEpoch(): string | undefined;
-    // (undocumented)
-    get(entry: IEntry): Promise<any>;
-    // (undocumented)
-    protected readonly logger: ITelemetryLoggerExt;
-    // (undocumented)
-    put(entry: IEntry, value: any): Promise<void>;
-    // (undocumented)
-    readonly rateLimiter: RateLimiter;
-    // (undocumented)
-    removeEntries(): Promise<void>;
-    // (undocumented)
-    setEpoch(epoch: string, fromCache: boolean, fetchType: FetchTypeInternal): void;
-    // (undocumented)
-    validateEpoch(epoch: string | undefined, fetchType: FetchType): Promise<void>;
-    // (undocumented)
-    protected validateEpochFromResponse(epochFromResponse: string | undefined, fetchType: FetchTypeInternal, fromCache?: boolean): void;
-}
-
 // @beta @legacy (undocumented)
 export type FetchType = "blob" | "createBlob" | "createFile" | "joinSession" | "ops" | "test" | "snapshotTree" | "treesLatest" | "uploadSummary" | "push" | "versions" | "renameFile";
 
@@ -70,7 +36,27 @@ export interface ICacheAndTracker {
     // (undocumented)
     cache: IOdspCache;
     // (undocumented)
-    epochTracker: EpochTracker;
+    epochTracker: IEpochTracker;
+}
+
+// @beta @legacy
+export interface IEpochTracker extends IPersistedFileCache {
+    // (undocumented)
+    fetch(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<Response>>;
+    // (undocumented)
+    fetchAndParseAsJSON<T>(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<T>>;
+    // (undocumented)
+    fetchArray(url: string, fetchOptions: {
+        [index: string]: RequestInit;
+    }, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<ArrayBuffer>>;
+    // (undocumented)
+    readonly fluidEpoch: string | undefined;
+    // (undocumented)
+    readonly rateLimiter: RateLimiter;
+    // (undocumented)
+    setEpoch(epoch: string, fromCache: boolean, fetchType: FetchTypeInternal): void;
+    // (undocumented)
+    validateEpoch(epoch: string | undefined, fetchType: FetchType): Promise<void>;
 }
 
 // @beta @legacy

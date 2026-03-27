@@ -30,7 +30,7 @@ import type {
 	OdspSummaryTreeEntry,
 	OdspSummaryTreeValue,
 } from "./../contracts.js";
-import type { EpochTracker, FetchType } from "./../epochTracker.js";
+import type { IEpochTracker, FetchType } from "./../epochTracker.js";
 import { getHeadersWithAuth } from "./../getUrlAndHeadersWithAuth.js";
 import { checkForKnownServerFarmType } from "./../odspUrlHelper.js";
 import { getWithRetryForTokenRefresh, maxUmpPostBodySize } from "./../odspUtils.js";
@@ -208,7 +208,7 @@ export async function createNewFluidContainerCore<T>(args: {
 	logger: ITelemetryLoggerExt;
 	initialUrl: string;
 	forceAccessTokenViaAuthorizationHeader: boolean;
-	epochTracker: EpochTracker;
+	epochTracker: IEpochTracker;
 	telemetryName: string;
 	fetchType: FetchType;
 	validateResponseCallback?: (content: T) => void;

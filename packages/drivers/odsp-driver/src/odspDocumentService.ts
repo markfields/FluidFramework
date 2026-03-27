@@ -30,7 +30,7 @@ import {
 } from "@fluidframework/telemetry-utils/internal";
 
 import type { HostStoragePolicyInternal } from "./contracts.js";
-import type { EpochTracker } from "./epochTracker.js";
+import type { IEpochTracker } from "./epochTracker.js";
 import type { IOdspCache } from "./odspCache.js";
 import type { OdspDelayLoadedDeltaStream } from "./odspDelayLoadedDeltaStream.js";
 import {
@@ -83,7 +83,7 @@ export class OdspDocumentService
 		logger: ITelemetryLoggerExt,
 		cache: IOdspCache,
 		hostPolicy: HostStoragePolicy,
-		epochTracker: EpochTracker,
+		epochTracker: IEpochTracker,
 		socketReferenceKeyPrefix?: string,
 		clientIsSummarizer?: boolean,
 	): Promise<IDocumentService> {
@@ -131,7 +131,7 @@ export class OdspDocumentService
 		logger: ITelemetryLoggerExt,
 		private readonly cache: IOdspCache,
 		hostPolicy: HostStoragePolicy,
-		private readonly epochTracker: EpochTracker,
+		private readonly epochTracker: IEpochTracker,
 		private readonly socketReferenceKeyPrefix?: string,
 		private readonly clientIsSummarizer?: boolean,
 	) {

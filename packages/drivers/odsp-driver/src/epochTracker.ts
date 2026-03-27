@@ -75,6 +75,40 @@ export type FetchTypeInternal = FetchType | "cache";
 export const Odsp409Error = "Odsp409Error";
 
 /**
+ * Interface for tracking ODSP epoch values and making epoch-validated fetch calls.
+ *
+ * @legacy
+ * @beta
+ */
+export interface IEpochTracker extends IPersistedFileCache {
+	readonly rateLimiter: RateLimiter;
+	readonly fluidEpoch: string | undefined;
+	setEpoch(epoch: string, fromCache: boolean, fetchType: FetchTypeInternal): void;
+	validateEpoch(epoch: string | undefined, fetchType: FetchType): Promise<void>;
+	fetchAndParseAsJSON<T>(
+		url: string,
+		fetchOptions: RequestInit,
+		fetchType: FetchType,
+		addInBody?: boolean,
+		fetchReason?: string,
+	): Promise<IOdspResponse<T>>;
+	fetch(
+		url: string,
+		fetchOptions: RequestInit,
+		fetchType: FetchType,
+		addInBody?: boolean,
+		fetchReason?: string,
+	): Promise<IOdspResponse<Response>>;
+	fetchArray(
+		url: string,
+		fetchOptions: { [index: string]: RequestInit },
+		fetchType: FetchType,
+		addInBody?: boolean,
+		fetchReason?: string,
+	): Promise<IOdspResponse<ArrayBuffer>>;
+}
+
+/**
  * In ODSP, the concept of "epoch" refers to binary updates to files. For example, this might include using
  * version restore, or if the user downloads a Fluid file and then uploads it again. These result in the epoch
  * value being incremented.
@@ -88,10 +122,9 @@ export const Odsp409Error = "Odsp409Error";
  * server can match it with its epoch value in order to match the version.
  * It also validates the epoch value received in response of fetch calls. If the epoch does not match,
  * then it also clears all the cached entries for the given container.
- * @legacy
- * @beta
+ * @internal
  */
-export class EpochTracker implements IPersistedFileCache {
+export class EpochTracker implements IEpochTracker {
 	private _fluidEpoch: string | undefined;
 
 	private readonly snapshotCacheExpiryTimeoutMs: number;
@@ -625,7 +658,7 @@ export class EpochTrackerWithRedemption extends EpochTracker {
  */
 export interface ICacheAndTracker {
 	cache: IOdspCache;
-	epochTracker: EpochTracker;
+	epochTracker: IEpochTracker;
 }
 
 export function createOdspCacheAndTracker(
