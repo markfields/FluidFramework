@@ -13,6 +13,7 @@ import type { IIdCompressor, SessionId } from "@fluidframework/id-compressor";
 import {
 	createIdCompressor,
 	deserializeIdCompressor,
+	toIdCompressorWithCore,
 	type IIdCompressorCore,
 } from "@fluidframework/id-compressor/internal";
 
@@ -256,18 +257,18 @@ export const createOrDeserializeCompressor = (
 	sessionId: SessionId,
 	summary?: FuzzSerializedIdCompressor,
 ): IIdCompressor & IIdCompressorCore => {
-	return summary === undefined
-		? createIdCompressor(sessionId)
-		: summary.withSession
-			? deserializeIdCompressor(summary.serializedCompressor)
-			: deserializeIdCompressor(summary.serializedCompressor, sessionId);
+	return toIdCompressorWithCore(
+		summary === undefined
+			? createIdCompressor(sessionId)
+			: summary.withSession
+				? deserializeIdCompressor(summary.serializedCompressor)
+				: deserializeIdCompressor(summary.serializedCompressor, sessionId),
+	);
 };
 
 export const deterministicIdCompressorFactory: (
 	seed: number,
-) => (summary?: FuzzSerializedIdCompressor) => ReturnType<typeof createIdCompressor> = (
-	seed,
-) => {
+) => (summary?: FuzzSerializedIdCompressor) => IIdCompressor & IIdCompressorCore = (seed) => {
 	const random = makeRandom(seed);
 	return (summary?: FuzzSerializedIdCompressor) => {
 		const sessionId = random.uuid4() as SessionId;

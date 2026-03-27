@@ -9,7 +9,12 @@ import { bufferToString, stringToBuffer } from "@fluid-internal/client-utils";
 import { take } from "@fluid-private/stochastic-test-utils";
 import { createChildLogger, MockLogger } from "@fluidframework/telemetry-utils/internal";
 
-import { IdCompressor, createIdCompressor, deserializeIdCompressor } from "../idCompressor.js";
+import {
+	IdCompressor,
+	createIdCompressor,
+	deserializeIdCompressor,
+	toIdCompressorWithCore,
+} from "../idCompressor.js";
 import type {
 	OpSpaceCompressedId,
 	SerializedIdCompressorWithNoSession,
@@ -917,7 +922,7 @@ describe("IdCompressor", () => {
 
 		it("correctly passes logger when no session specified", () => {
 			const mockLogger = new MockLogger();
-			const compressor = createIdCompressor(mockLogger);
+			const compressor = toIdCompressorWithCore(createIdCompressor(mockLogger));
 			compressor.generateCompressedId();
 			compressor.finalizeCreationRange(compressor.takeNextCreationRange());
 			mockLogger.assertMatchAny([
@@ -999,9 +1004,11 @@ describe("IdCompressor", () => {
 			compressor.generateCompressedId();
 			const serializedWithSession = compressor.serialize(true);
 			// Resume with logger and ensure telemetry emits on serialize
-			const resumed = deserializeIdCompressor(
-				serializedWithSession,
-				createChildLogger({ logger: mockLogger }),
+			const resumed = toIdCompressorWithCore(
+				deserializeIdCompressor(
+					serializedWithSession,
+					createChildLogger({ logger: mockLogger }),
+				),
 			);
 			resumed.serialize(false);
 			mockLogger.assertMatchAny([
@@ -1017,10 +1024,12 @@ describe("IdCompressor", () => {
 			compressor.finalizeCreationRange(compressor.takeNextCreationRange());
 			const serializedNoSession = compressor.serialize(false);
 			const newSessionId = createSessionId();
-			const resumed = deserializeIdCompressor(
-				serializedNoSession,
-				newSessionId,
-				createChildLogger({ logger: mockLogger }),
+			const resumed = toIdCompressorWithCore(
+				deserializeIdCompressor(
+					serializedNoSession,
+					newSessionId,
+					createChildLogger({ logger: mockLogger }),
+				),
 			);
 			resumed.serialize(false);
 			mockLogger.assertMatchAny([

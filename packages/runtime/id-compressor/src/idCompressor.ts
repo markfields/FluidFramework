@@ -746,9 +746,7 @@ export class IdCompressor implements IIdCompressor, IIdCompressorCore {
  * Create a new {@link IIdCompressor}.
  * @legacy @beta
  */
-export function createIdCompressor(
-	logger?: ITelemetryBaseLogger,
-): IIdCompressor & IIdCompressorCore;
+export function createIdCompressor(logger?: ITelemetryBaseLogger): IIdCompressor;
 /**
  * Create a new {@link IIdCompressor}.
  * @param sessionId - The seed ID for the compressor.
@@ -757,11 +755,11 @@ export function createIdCompressor(
 export function createIdCompressor(
 	sessionId: SessionId,
 	logger?: ITelemetryBaseLogger,
-): IIdCompressor & IIdCompressorCore;
+): IIdCompressor;
 export function createIdCompressor(
 	sessionIdOrLogger?: SessionId | ITelemetryBaseLogger,
 	loggerOrUndefined?: ITelemetryBaseLogger,
-): IIdCompressor & IIdCompressorCore {
+): IIdCompressor {
 	let localSessionId: SessionId;
 	let logger: ITelemetryBaseLogger | undefined;
 	if (sessionIdOrLogger === undefined) {
@@ -789,7 +787,7 @@ export function createIdCompressor(
 export function deserializeIdCompressor(
 	serialized: SerializedIdCompressorWithOngoingSession,
 	logger?: ITelemetryLoggerExt,
-): IIdCompressor & IIdCompressorCore;
+): IIdCompressor;
 /**
  * Deserializes the supplied state into an ID compressor.
  * @legacy @beta
@@ -798,12 +796,12 @@ export function deserializeIdCompressor(
 	serialized: SerializedIdCompressorWithNoSession,
 	newSessionId: SessionId,
 	logger?: ITelemetryLoggerExt,
-): IIdCompressor & IIdCompressorCore;
+): IIdCompressor;
 export function deserializeIdCompressor(
 	serialized: SerializedIdCompressor | SerializedIdCompressorWithNoSession,
 	sessionIdOrLogger: SessionId | ITelemetryLoggerExt | undefined,
 	loggerOrUndefined?: ITelemetryLoggerExt,
-): IIdCompressor & IIdCompressorCore {
+): IIdCompressor {
 	if (typeof sessionIdOrLogger === "string") {
 		return IdCompressor.deserialize({
 			serialized: serialized as SerializedIdCompressorWithNoSession,
@@ -820,4 +818,59 @@ export function deserializeIdCompressor(
 		serialized: serialized as SerializedIdCompressorWithOngoingSession,
 		logger: sessionIdOrLogger,
 	});
+}
+
+/**
+ * Serializes an ID compressor.
+ * @param compressor - The compressor to serialize.
+ * @param withSession - If true, the serialized state will include local session
+ * state (for stashing). If false, only finalized state is included (for summaries).
+ * @legacy @beta
+ */
+export function serializeIdCompressor(
+	compressor: IIdCompressor,
+	withSession: true,
+): SerializedIdCompressorWithOngoingSession;
+/**
+ * Serializes an ID compressor.
+ * @param compressor - The compressor to serialize.
+ * @param withSession - If true, the serialized state will include local session
+ * state (for stashing). If false, only finalized state is included (for summaries).
+ * @legacy @beta
+ */
+export function serializeIdCompressor(
+	compressor: IIdCompressor,
+	withSession: false,
+): SerializedIdCompressorWithNoSession;
+export function serializeIdCompressor(
+	compressor: IIdCompressor,
+	withSession: boolean,
+): SerializedIdCompressorWithOngoingSession | SerializedIdCompressorWithNoSession {
+	const core = toIdCompressorWithCore(compressor);
+	return withSession ? core.serialize(true) : core.serialize(false);
+}
+
+/**
+ * Casts an {@link IIdCompressor} to include {@link IIdCompressorCore}.
+ *
+ * @remarks
+ * Compressors returned by `createIdCompressor` and `deserializeIdCompressor`
+ * always implement both {@link IIdCompressor} and {@link IIdCompressorCore}, but their
+ * return types are narrowed to {@link IIdCompressor} to keep {@link IIdCompressorCore}
+ * out of the `@legacy` API surface. Internal consumers that need access to core
+ * compressor operations (serialization, range management, etc.) should use this function.
+ *
+ * @param compressor - A compressor created by `createIdCompressor` or
+ * `deserializeIdCompressor`.
+ * @returns The same compressor, typed to include {@link IIdCompressorCore}.
+ * @internal
+ */
+export function toIdCompressorWithCore(
+	compressor: IIdCompressor,
+): IIdCompressor & IIdCompressorCore {
+	assert(
+		"serialize" in compressor,
+		0xcd7 /* Expected compressor to implement IIdCompressorCore */,
+	);
+	return compressor as IIdCompressor & IIdCompressorCore;
 }

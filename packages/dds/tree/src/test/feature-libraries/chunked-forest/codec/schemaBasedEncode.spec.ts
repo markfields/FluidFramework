@@ -5,7 +5,7 @@
 
 import { strict as assert, fail } from "node:assert";
 
-import { createIdCompressor } from "@fluidframework/id-compressor/internal";
+import { createIdCompressor, toIdCompressorWithCore } from "@fluidframework/id-compressor/internal";
 import { isFluidHandle } from "@fluidframework/runtime-utils/internal";
 
 import { currentVersion } from "../../../../codec/index.js";
@@ -449,9 +449,9 @@ describe("schemaBasedEncoding", () => {
 			// TODO: test non size 1 batches
 			for (const { name, treeFactory, schemaData } of testTrees) {
 				it(name, () => {
-					const idCompressor = createIdCompressor(
+					const idCompressor = toIdCompressorWithCore(createIdCompressor(
 						assertIsSessionId("00000000-0000-4000-b000-000000000000"),
-					);
+					));
 					const storedSchema = schemaData;
 					const tree = treeFactory(idCompressor);
 					// Check with checkFieldEncode

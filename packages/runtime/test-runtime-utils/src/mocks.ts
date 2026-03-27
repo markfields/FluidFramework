@@ -50,6 +50,7 @@ import {
 import type { IIdCompressor } from "@fluidframework/id-compressor";
 import {
 	createIdCompressor,
+	toIdCompressorWithCore,
 	type IIdCompressorCore,
 	type IdCreationRange,
 } from "@fluidframework/id-compressor/internal";
@@ -869,7 +870,7 @@ export class MockFluidDataStoreRuntime
 		entryPoint?: IFluidHandle<FluidObject>;
 		id?: string;
 		logger?: ITelemetryBaseLogger;
-		idCompressor?: IIdCompressor & IIdCompressorCore;
+		idCompressor?: IIdCompressor;
 		attachState?: AttachState;
 		registry?: readonly IChannelFactory[];
 		minVersionForCollab?: MinimumVersionForCollab;
@@ -888,7 +889,7 @@ export class MockFluidDataStoreRuntime
 			childLoggerProps.logger = logger;
 		}
 		this.logger = createChildLogger(childLoggerProps);
-		this.idCompressor = overrides?.idCompressor ?? createIdCompressor();
+		this.idCompressor = toIdCompressorWithCore(overrides?.idCompressor ?? createIdCompressor());
 		this._attachState = overrides?.attachState ?? AttachState.Attached;
 
 		const registry = overrides?.registry;

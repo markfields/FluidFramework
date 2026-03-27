@@ -16,7 +16,7 @@ import {
 } from '@fluidframework/datastore-definitions/internal';
 import { MessageType, type ISequencedDocumentMessage } from '@fluidframework/driver-definitions/internal';
 import type { SessionId } from '@fluidframework/id-compressor';
-import type { IIdCompressorCore } from '@fluidframework/id-compressor/internal';
+import { toIdCompressorWithCore } from '@fluidframework/id-compressor/internal';
 import type {
 	IExperimentalIncrementalSummaryContext,
 	IGarbageCollectionData,
@@ -110,7 +110,7 @@ export class MigrationShim extends EventEmitterWithErrorHandling<IMigrationEvent
 		this.preMigrationDeltaConnection.disableSubmit();
 		const { idCompressor } = this.runtime;
 		if (idCompressor !== undefined) {
-			(idCompressor as unknown as IIdCompressorCore).beginGhostSession(ghostSessionId, () =>
+			toIdCompressorWithCore(idCompressor).beginGhostSession(ghostSessionId, () =>
 				this.populateNewSharedObjectFn(this.legacyTree, newTree)
 			);
 		} else {

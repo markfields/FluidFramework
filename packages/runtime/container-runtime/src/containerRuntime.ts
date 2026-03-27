@@ -104,6 +104,7 @@ import {
 	createIdCompressor,
 	createSessionId,
 	deserializeIdCompressor,
+	toIdCompressorWithCore,
 } from "@fluidframework/id-compressor/internal";
 import {
 	FlushMode,
@@ -1149,17 +1150,21 @@ export class ContainerRuntime
 			const pendingLocalState = context.pendingLocalState as IPendingRuntimeState;
 
 			if (pendingLocalState?.pendingIdCompressorState !== undefined) {
-				return deserializeIdCompressor(
-					pendingLocalState.pendingIdCompressorState,
-					compressorLogger,
+				return toIdCompressorWithCore(
+					deserializeIdCompressor(
+						pendingLocalState.pendingIdCompressorState,
+						compressorLogger,
+					),
 				);
 			} else if (serializedIdCompressor === undefined) {
-				return createIdCompressor(compressorLogger);
+				return toIdCompressorWithCore(createIdCompressor(compressorLogger));
 			} else {
-				return deserializeIdCompressor(
-					serializedIdCompressor,
-					createSessionId(),
-					compressorLogger,
+				return toIdCompressorWithCore(
+					deserializeIdCompressor(
+						serializedIdCompressor,
+						createSessionId(),
+						compressorLogger,
+					),
 				);
 			}
 		};
