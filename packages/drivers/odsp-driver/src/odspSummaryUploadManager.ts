@@ -31,7 +31,7 @@ import type {
 	OdspSummaryTreeEntry,
 	OdspSummaryTreeValue,
 } from "./contracts.js";
-import type { IEpochTracker } from "./epochTracker.js";
+import type { IOdspStorageFetchClient } from "./epochTracker.js";
 import { getHeadersWithAuth } from "./getUrlAndHeadersWithAuth.js";
 import { getWithRetryForTokenRefresh } from "./odspUtils.js";
 
@@ -48,7 +48,7 @@ export class OdspSummaryUploadManager {
 		private readonly snapshotUrl: string,
 		private readonly getAuthHeader: InstrumentedStorageTokenFetcher,
 		logger: ITelemetryLoggerExt,
-		private readonly epochTracker: IEpochTracker,
+		private readonly epochTracker: IOdspStorageFetchClient,
 		private readonly relayServiceTenantAndSessionId: () => string | undefined,
 	) {
 		this.mc = loggerToMonitoringContext(logger);

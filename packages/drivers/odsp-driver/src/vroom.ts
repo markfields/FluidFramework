@@ -15,7 +15,7 @@ import {
 } from "@fluidframework/telemetry-utils/internal";
 import { v4 as uuid } from "uuid";
 
-import type { IEpochTracker } from "./epochTracker.js";
+import type { IOdspStorageFetchClient } from "./epochTracker.js";
 import { mockify } from "./mockify.js";
 import { getApiRoot } from "./odspUrlHelper.js";
 import type { TokenFetchOptionsEx } from "./odspUtils.js";
@@ -51,7 +51,7 @@ export const fetchJoinSession = mockify(
 		method: "GET" | "POST",
 		logger: ITelemetryLoggerExt,
 		getAuthHeader: InstrumentedStorageTokenFetcher,
-		epochTracker: IEpochTracker,
+		epochTracker: IOdspStorageFetchClient,
 		requestSocketToken: boolean,
 		options: TokenFetchOptionsEx,
 		disableJoinSessionRefresh: boolean | undefined,

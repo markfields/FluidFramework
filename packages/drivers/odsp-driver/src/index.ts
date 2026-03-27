@@ -56,7 +56,7 @@ export type {
 } from "./odspCache.js";
 export type {
 	ICacheAndTracker,
-	IEpochTracker,
+	IOdspStorageFetchClient,
 	FetchType,
 	FetchTypeInternal,
 } from "./epochTracker.js";

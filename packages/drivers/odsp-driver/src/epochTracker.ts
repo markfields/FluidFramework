@@ -80,7 +80,7 @@ export const Odsp409Error = "Odsp409Error";
  * @legacy
  * @beta
  */
-export interface IEpochTracker extends IPersistedFileCache {
+export interface IOdspStorageFetchClient extends IPersistedFileCache {
 	readonly rateLimiter: RateLimiter;
 	readonly fluidEpoch: string | undefined;
 	setEpoch(epoch: string, fromCache: boolean, fetchType: FetchTypeInternal): void;
@@ -124,7 +124,7 @@ export interface IEpochTracker extends IPersistedFileCache {
  * then it also clears all the cached entries for the given container.
  * @internal
  */
-export class EpochTracker implements IEpochTracker {
+export class EpochTracker implements IOdspStorageFetchClient {
 	private _fluidEpoch: string | undefined;
 
 	private readonly snapshotCacheExpiryTimeoutMs: number;
@@ -658,7 +658,7 @@ export class EpochTrackerWithRedemption extends EpochTracker {
  */
 export interface ICacheAndTracker {
 	cache: IOdspCache;
-	epochTracker: IEpochTracker;
+	epochTracker: IOdspStorageFetchClient;
 }
 
 export function createOdspCacheAndTracker(

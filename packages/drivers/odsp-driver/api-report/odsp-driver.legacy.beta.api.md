@@ -36,27 +36,7 @@ export interface ICacheAndTracker {
     // (undocumented)
     cache: IOdspCache;
     // (undocumented)
-    epochTracker: IEpochTracker;
-}
-
-// @beta @legacy
-export interface IEpochTracker extends IPersistedFileCache {
-    // (undocumented)
-    fetch(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<Response>>;
-    // (undocumented)
-    fetchAndParseAsJSON<T>(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<T>>;
-    // (undocumented)
-    fetchArray(url: string, fetchOptions: {
-        [index: string]: RequestInit;
-    }, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<ArrayBuffer>>;
-    // (undocumented)
-    readonly fluidEpoch: string | undefined;
-    // (undocumented)
-    readonly rateLimiter: RateLimiter;
-    // (undocumented)
-    setEpoch(epoch: string, fromCache: boolean, fetchType: FetchTypeInternal): void;
-    // (undocumented)
-    validateEpoch(epoch: string | undefined, fetchType: FetchType): Promise<void>;
+    epochTracker: IOdspStorageFetchClient;
 }
 
 // @beta @legacy
@@ -84,6 +64,26 @@ export interface IOdspResponse<T> {
     headers: Map<string, string>;
     // (undocumented)
     propsToLog: ITelemetryBaseProperties;
+}
+
+// @beta @legacy
+export interface IOdspStorageFetchClient extends IPersistedFileCache {
+    // (undocumented)
+    fetch(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<Response>>;
+    // (undocumented)
+    fetchAndParseAsJSON<T>(url: string, fetchOptions: RequestInit, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<T>>;
+    // (undocumented)
+    fetchArray(url: string, fetchOptions: {
+        [index: string]: RequestInit;
+    }, fetchType: FetchType, addInBody?: boolean, fetchReason?: string): Promise<IOdspResponse<ArrayBuffer>>;
+    // (undocumented)
+    readonly fluidEpoch: string | undefined;
+    // (undocumented)
+    readonly rateLimiter: RateLimiter;
+    // (undocumented)
+    setEpoch(epoch: string, fromCache: boolean, fetchType: FetchTypeInternal): void;
+    // (undocumented)
+    validateEpoch(epoch: string | undefined, fetchType: FetchType): Promise<void>;
 }
 
 // @beta @legacy

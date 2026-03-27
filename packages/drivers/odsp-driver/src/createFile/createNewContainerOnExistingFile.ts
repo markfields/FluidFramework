@@ -18,7 +18,7 @@ import {
 import type { IWriteSummaryResponse } from "./../contracts.js";
 import { ClpCompliantAppHeader, FileMetadataHeader } from "./../contractsPublic.js";
 import { createOdspUrl } from "./../createOdspUrl.js";
-import type { IEpochTracker } from "./../epochTracker.js";
+import type { IOdspStorageFetchClient } from "./../epochTracker.js";
 import { OdspDriverUrlResolver } from "./../odspDriverUrlResolver.js";
 import { getApiRoot } from "./../odspUrlHelper.js";
 import {
@@ -48,7 +48,7 @@ export async function createNewContainerOnExistingFile(
 	fileInfo: IExistingFileInfo,
 	logger: ITelemetryLoggerExt,
 	createNewSummary: ISummaryTree | undefined,
-	epochTracker: IEpochTracker,
+	epochTracker: IOdspStorageFetchClient,
 	fileEntry: IFileEntry,
 	createNewCaching: boolean,
 	forceAccessTokenViaAuthorizationHeader: boolean,

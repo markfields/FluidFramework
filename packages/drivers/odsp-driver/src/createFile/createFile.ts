@@ -23,7 +23,7 @@ import {
 import type { ICreateFileResponse, IRenameFileResponse } from "./../contracts.js";
 import { ClpCompliantAppHeader } from "./../contractsPublic.js";
 import { createOdspUrl } from "./../createOdspUrl.js";
-import type { IEpochTracker } from "./../epochTracker.js";
+import type { IOdspStorageFetchClient } from "./../epochTracker.js";
 import { getHeadersWithAuth } from "./../getUrlAndHeadersWithAuth.js";
 import { OdspDriverUrlResolver } from "./../odspDriverUrlResolver.js";
 import { checkForKnownServerFarmType, getApiRoot } from "./../odspUrlHelper.js";
@@ -57,7 +57,7 @@ export async function createNewFluidFile(
 	newFileInfo: INewFileInfo,
 	logger: ITelemetryLoggerExt,
 	createNewSummary: ISummaryTree | undefined,
-	epochTracker: IEpochTracker,
+	epochTracker: IOdspStorageFetchClient,
 	fileEntry: IFileEntry,
 	createNewCaching: boolean,
 	forceAccessTokenViaAuthorizationHeader: boolean,
@@ -205,7 +205,7 @@ export async function createNewEmptyFluidFile(
 	getAuthHeader: InstrumentedStorageTokenFetcher,
 	newFileInfo: INewFileInfo,
 	logger: ITelemetryLoggerExt,
-	epochTracker: IEpochTracker,
+	epochTracker: IOdspStorageFetchClient,
 ): Promise<{ itemId: string; fileName: string }> {
 	const filePath = encodeFilePath(newFileInfo.filePath);
 	const encodedFilename = encodeURIComponent(`${newFileInfo.filename}.tmp`);
@@ -273,7 +273,7 @@ export async function renameEmptyFluidFile(
 	odspParts: IOdspUrlParts,
 	requestedFileName: string,
 	logger: ITelemetryLoggerExt,
-	epochTracker: IEpochTracker,
+	epochTracker: IOdspStorageFetchClient,
 ): Promise<IRenameFileResponse> {
 	const initialUrl = `${getApiRoot(new URL(odspParts.siteUrl))}/drives/${
 		odspParts.driveId
@@ -334,7 +334,7 @@ export async function createNewFluidFileFromSummary(
 	newFileInfo: INewFileInfo,
 	logger: ITelemetryLoggerExt,
 	createNewSummary: ISummaryTree,
-	epochTracker: IEpochTracker,
+	epochTracker: IOdspStorageFetchClient,
 	forceAccessTokenViaAuthorizationHeader: boolean,
 ): Promise<ICreateFileResponse> {
 	const filePath = encodeFilePath(newFileInfo.filePath);

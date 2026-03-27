@@ -21,7 +21,7 @@ import {
 import { v4 as uuid } from "uuid";
 
 import type { IDeltaStorageGetResponse, ISequencedDeltaOpMessage } from "./contracts.js";
-import type { IEpochTracker } from "./epochTracker.js";
+import type { IOdspStorageFetchClient } from "./epochTracker.js";
 import type { OdspDocumentStorageService } from "./odspDocumentStorageManager.js";
 import { getWithRetryForTokenRefresh } from "./odspUtils.js";
 
@@ -32,7 +32,7 @@ export class OdspDeltaStorageService {
 	constructor(
 		private readonly deltaFeedUrl: string,
 		private readonly getAuthHeader: InstrumentedStorageTokenFetcher,
-		private readonly epochTracker: IEpochTracker,
+		private readonly epochTracker: IOdspStorageFetchClient,
 		private readonly logger: ITelemetryLoggerExt,
 	) {}
 
