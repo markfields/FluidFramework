@@ -82,7 +82,7 @@ export interface ILoaderServices {
     readonly options: ILoaderOptions;
     readonly protocolHandlerBuilder?: ProtocolHandlerBuilder;
     readonly scope: FluidObject;
-    readonly subLogger: ITelemetryLoggerExt;
+    readonly subLogger: ITelemetryBaseLogger;
     readonly urlResolver: IUrlResolver;
 }
 

@@ -26,7 +26,6 @@ import type {
 	IUrlResolver,
 } from "@fluidframework/driver-definitions/internal";
 import {
-	type ITelemetryLoggerExt,
 	type MonitoringContext,
 	PerformanceEvent,
 	createChildMonitoringContext,
@@ -216,7 +215,7 @@ export interface ILoaderServices {
 	/**
 	 * The logger downstream consumers should construct their loggers from
 	 */
-	readonly subLogger: ITelemetryLoggerExt;
+	readonly subLogger: ITelemetryBaseLogger;
 
 	/**
 	 * Optional property for allowing the container to use a custom
