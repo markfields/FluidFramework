@@ -877,6 +877,8 @@ export class MockFluidDataStoreRuntime
 		attachState?: AttachState;
 		registry?: readonly IChannelFactory[];
 		minVersionForCollab?: MinimumVersionForCollab;
+		inStagingMode?: boolean;
+		isDirty?: boolean;
 	}) {
 		super();
 		this.clientId = overrides?.clientId ?? uuid();
@@ -901,6 +903,8 @@ export class MockFluidDataStoreRuntime
 		}
 
 		this.minVersionForCollab = overrides?.minVersionForCollab ?? defaultMinVersionForCollab;
+		this.inStagingMode = overrides?.inStagingMode ?? false;
+		this.isDirty = overrides?.isDirty ?? false;
 	}
 
 	private readonly: boolean = false;
@@ -926,6 +930,8 @@ export class MockFluidDataStoreRuntime
 		return this;
 	}
 
+	public readonly inStagingMode: boolean;
+	public readonly isDirty: boolean;
 	public readonly documentId: string = undefined as any;
 	public readonly id: string;
 	public readonly existing: boolean = undefined as any;
