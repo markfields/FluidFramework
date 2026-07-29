@@ -27,31 +27,60 @@ export const disconnectGatesInboundOps = fluidScenario(
 		file: "packages/test/test-end-to-end-tests/src/test/container.spec.ts",
 		suite: "Container",
 		test: "can control op processing with connect() and disconnect()",
-		lines: "374-462",
+		lines: "374-447",
 	})
 	.document(document("collaboration", [rootDataStore]))
 	.clients(interactiveClient("writer"), interactiveClient("reader"))
-	.covers("container-lifecycle", "op-stream")
+	.covers("container-lifecycle", "op-stream", "op-ordering")
 	.steps((s) => {
 		s.client("writer").load({ from: { kind: "service" } });
 		s.client("reader").load({ from: { kind: "service" } });
+		s.note(
+			"The reader states its membership explicitly, so it is catching up until its own join message is ordered and processed.",
+		);
+		s.expectClient("reader").toBe({ connection: "catchingUp" });
+		s.sequence().join("seq-reader-join", "reader");
+		s.expectClient("reader").toBe({ connection: "connected" });
+
 		s.client("writer").submitOperation(op("initial-value"));
+		s.sequence().operations("seq-initial", "writer", ["initial-value"]);
 		s.service().synchronize();
 		s.expectOperation("initial-value").at("reader").toBe("processed");
 
 		s.client("reader").disconnect();
 		s.expectClient("reader").toBe({ connection: "disconnected" });
+		s.sequence().leave("seq-reader-leave", "reader");
+
 		s.client("writer").submitOperation(op("value-while-reader-disconnected"));
-		s.service().synchronize("writer");
-		s.expectOperation("value-while-reader-disconnected").at("reader").toBe("notProcessed");
+		s.sequence().operations("seq-while-disconnected", "writer", [
+			"value-while-reader-disconnected",
+		]);
+		s.note(
+			"The operation is ordered by the service even though the reader is not there to receive it. Sequencing and per-client processing are different events.",
+		);
+		s.service().deliver("writer").through("latest");
+		s.expectOperation("value-while-reader-disconnected").at("writer").toBe("acked");
+		s.expectOperation("value-while-reader-disconnected").at("reader").toBe("sequenced");
+		s.expectDelivery("reader").toBe({
+			processedThrough: { relation: "equal", position: "seq-initial" },
+		});
 
 		s.client("reader").connect();
-		s.service().synchronize();
+		s.note(
+			"Rejoining is catching up: the reader's own join position is the point it has processed through.",
+		);
+		s.sequence().join("seq-reader-rejoin", "reader");
 		s.expectOperation("value-while-reader-disconnected").at("reader").toBe("processed");
+		s.expectDelivery("reader").toBe({
+			processedThrough: { relation: "equal", position: "seq-reader-rejoin" },
+		});
+		s.service().synchronize();
+		s.expectConvergence("writer", "reader");
+		s.expectTrace().toSatisfy();
 	});
 
 export const pausedLoadAfterSummary = fluidScenario(
-	"load remains paused at the requested summary sequence",
+	"load remains pinned at the summary's reference position",
 )
 	.fromTest({
 		file: "packages/test/test-end-to-end-tests/src/test/loadModes.spec.ts",
@@ -65,47 +94,85 @@ export const pausedLoadAfterSummary = fluidScenario(
 		summarizerClient("summarizer"),
 		interactiveClient("paused-reader"),
 	)
-	.covers("container-load", "snapshot", "summarization", "op-stream")
+	.covers("container-load", "snapshot", "summarization", "op-ordering")
 	.steps((s) => {
 		s.client("writer").load({ from: { kind: "service" } });
 		s.client("summarizer").load({ from: { kind: "service" } });
+
+		const beforeSummary = [0, 1, 2, 3, 4].map((index) => `before-summary-${index}`);
 		s.client("writer").submitBatch({
 			id: "before-summary",
-			operations: [0, 1, 2, 3, 4].map((index) => op(`before-summary-${index}`)),
+			operations: beforeSummary.map((id) => op(id)),
+		});
+		s.note(
+			"Grouped batching is off, so the batch occupies five sequenced messages carrying the batch begin/end markers.",
+		);
+		for (const [index, id] of beforeSummary.entries()) {
+			s.sequence().operations(`seq-${id}`, "writer", [id], {
+				batch: "before-summary",
+				batchPosition:
+					index === 0 ? "start" : index === beforeSummary.length - 1 ? "end" : "continuation",
+				clientSequence: index + 1,
+			});
+		}
+		s.expectBatch("before-summary").toBeVirtualizedAs({
+			grouped: false,
+			compressed: false,
+			chunked: false,
+			originalOperationCount: 5,
+			wireMessages: 5,
 		});
 		s.service().synchronize();
+
 		s.client("summarizer").summarize({ id: "summary-1" });
-		s.service().acknowledgeSummary("summary-1", "snapshot-1");
+		s.sequence().summarize("seq-summary-op-1", "summarizer", "summary-1");
+		s.sequence().summaryAck("seq-summary-ack-1", "summary-1", "snapshot-1");
+		s.service().synchronize();
 
 		s.client("paused-reader").load({
 			from: { kind: "service", snapshot: "snapshot-1" },
-			pauseAt: { kind: "summaryReferenceSequence", summary: "summary-1" },
+			pauseAt: "seq-before-summary-4",
 		});
-		s.expectSequence("paused-reader").toBe({
-			last: { relation: "equal", summary: "summary-1" },
+		s.note(
+			"The snapshot content corresponds to the summary op's reference position, not to the position of the summary op or its ack.",
+		);
+		s.expectDelivery("paused-reader").toBe({
+			loadedAt: { relation: "equal", position: "seq-before-summary-4" },
+			processedThrough: { relation: "equal", position: "seq-before-summary-4" },
 		});
 
+		const afterSummary = [0, 1, 2, 3, 4].map((index) => `after-summary-${index}`);
 		s.client("writer").submitBatch({
 			id: "after-summary",
-			operations: [0, 1, 2, 3, 4].map((index) => op(`after-summary-${index}`)),
+			operations: afterSummary.map((id) => op(id)),
 		});
-		s.service().synchronize("writer");
-		for (let index = 0; index < 5; index++) {
-			s.expectOperation(`after-summary-${index}`).at("paused-reader").toBe("notProcessed");
+		for (const [index, id] of afterSummary.entries()) {
+			s.sequence().operations(`seq-${id}`, "writer", [id], {
+				batch: "after-summary",
+				batchPosition:
+					index === 0 ? "start" : index === afterSummary.length - 1 ? "end" : "continuation",
+			});
 		}
-		s.expectSequence("paused-reader").toBe({
-			last: { relation: "equal", summary: "summary-1" },
+		s.service().synchronize("writer");
+		for (const id of afterSummary) {
+			s.expectOperation(id).at("paused-reader").toBe("sequenced");
+			s.expectOperation(id).at("paused-reader").toBeAppliedTimes(0);
+		}
+		s.expectDelivery("paused-reader").toBe({
+			processedThrough: { relation: "equal", position: "seq-before-summary-4" },
 		});
+		s.expectOrder("seq-summary-ack-1", "seq-after-summary-0");
+		s.expectTrace().toSatisfy();
 	});
 
 export const virtualizedOperationBatch = fluidScenario(
-	"group, compress, and chunk a DataStore operation batch",
+	"a grouped, compressed batch is reconstructed from three chunk messages",
 )
 	.fromTest({
 		file: "packages/test/test-end-to-end-tests/src/test/compression.spec.ts",
 		suite: "Op Compression > Compression",
 		test: "Correctly processes messages: compression [true] chunking [true] grouping [true]",
-		lines: "137-178",
+		lines: "131-179",
 	})
 	.document(
 		document("collaboration", [rootDataStore], {
@@ -119,49 +186,83 @@ export const virtualizedOperationBatch = fluidScenario(
 		}),
 	)
 	.clients(interactiveClient("writer"), interactiveClient("reader"))
-	.covers("op-stream", "op-virtualization")
+	.covers("op-stream", "op-ordering", "op-virtualization")
 	.steps((s) => {
 		s.client("writer").load({ from: { kind: "service" } });
 		s.client("reader").load({ from: { kind: "service" } });
+
+		const largeOps = [0, 1, 2].map((index) => `large-op-${index}`);
 		s.client("writer").submitBatch({
 			id: "large-batch",
-			operations: [
-				op("large-op-0", rootDataStore.id, 100),
-				op("large-op-1", rootDataStore.id, 100),
-				op("large-op-2", rootDataStore.id, 100),
-			],
+			operations: largeOps.map((id) => op(id, rootDataStore.id, 100)),
+		});
+		s.note(
+			"Three logical operations become one grouped payload, one compressed envelope, and three sequenced chunk messages. Only the final chunk reconstructs anything.",
+		);
+		s.sequence().chunk("seq-chunk-1", "writer", {
+			batch: "large-batch",
+			index: 1,
+			count: 3,
+			clientSequence: 1,
+		});
+		s.sequence().chunk("seq-chunk-2", "writer", {
+			batch: "large-batch",
+			index: 2,
+			count: 3,
+			clientSequence: 2,
+		});
+		s.sequence().operations("seq-chunk-3", "writer", largeOps, {
+			batch: "large-batch",
+			clientSequence: 3,
+			virtualization: {
+				grouped: true,
+				compressed: true,
+				chunk: { index: 3, count: 3 },
+			},
 		});
 		s.expectBatch("large-batch").toBeVirtualizedAs({
 			grouped: true,
 			compressed: true,
 			chunked: true,
 			originalOperationCount: 3,
+			wireMessages: 3,
 		});
-		s.service().synchronize();
-		for (let index = 0; index < 3; index++) {
-			s.expectOperation(`large-op-${index}`).at("writer").toBe("acked");
-			s.expectOperation(`large-op-${index}`).at("reader").toBe("processed");
+
+		s.service().deliver("reader").through("seq-chunk-2");
+		s.note(
+			"A reader holding two of three chunks has reconstructed nothing; partial wire state is not partial logical state.",
+		);
+		for (const id of largeOps) {
+			s.expectOperation(id).at("reader").toBe("sequenced");
 		}
+
+		s.service().synchronize();
+		for (const id of largeOps) {
+			s.expectOperation(id).at("writer").toBe("acked");
+			s.expectOperation(id).at("reader").toBe("processed");
+			s.expectOperation(id).at("reader").toBeAppliedTimes(1);
+		}
+		s.expectConvergence("writer", "reader");
+		s.expectTrace().toSatisfy();
 	});
 
 export const pendingBatchReentry = fluidScenario(
-	"reentrant pending batches are rebased and replayed in order",
+	"reentrant pending batches are rebased and replayed in submission order",
 )
 	.fromTest({
 		file: "packages/test/test-end-to-end-tests/src/test/pendingBatchReentry.spec.ts",
 		suite: "Op reentry and rebasing during pending batches",
 		test: "Pending batches with reentry - SharedCounter",
-		lines: "167-195",
+		lines: "130-180",
 	})
 	.document(
 		document("collaboration", [rootDataStore], {
 			flushMode: "immediate",
 			enableGroupedBatching: true,
-			enableBatchIdTracking: true,
 		}),
 	)
 	.clients(interactiveClient("writer"))
-	.covers("op-stream", "pending-state")
+	.covers("op-stream", "op-ordering", "pending-state", "replay")
 	.steps((s) => {
 		s.client("writer").load({
 			from: { kind: "service" },
@@ -176,13 +277,37 @@ export const pendingBatchReentry = fluidScenario(
 			operations: [op("reentrant-op")],
 			reentrant: true,
 		});
-		s.expectPendingReplay().toPreserve({
+		s.note(
+			"A read connection cannot place anything in the total order, so both batches stay pending and take effect only locally.",
+		);
+		s.expectOperation("initial-op").at("writer").toBe("pending");
+		s.expectOperation("reentrant-op").at("writer").toBe("pending");
+		s.expectPendingReplay("writer").toPreserve({
 			batches: ["initial-batch", "reentrant-batch"],
 			rebasedBatches: ["reentrant-batch"],
 		});
+
+		s.client("writer").connect();
+		s.sequence().operations("seq-initial", "writer", ["initial-op"], {
+			batch: "initial-batch",
+			batchPosition: "single",
+			clientSequence: 1,
+			virtualization: { grouped: true },
+		});
+		s.sequence().operations("seq-reentrant", "writer", ["reentrant-op"], {
+			batch: "reentrant-batch",
+			batchPosition: "single",
+			clientSequence: 2,
+			virtualization: { grouped: true },
+		});
+		s.expectOrder("seq-initial", "seq-reentrant");
+
 		s.service().synchronize();
 		s.expectOperation("initial-op").at("writer").toBe("acked");
 		s.expectOperation("reentrant-op").at("writer").toBe("acked");
+		s.expectOperation("initial-op").at("writer").toBeAppliedTimes(1);
+		s.expectOperation("reentrant-op").at("writer").toBeAppliedTimes(1);
+		s.expectTrace().toSatisfy();
 	});
 
 export const stashedOpsWithoutSavedOps = fluidScenario(
@@ -192,13 +317,12 @@ export const stashedOpsWithoutSavedOps = fluidScenario(
 		file: "packages/test/test-end-to-end-tests/src/test/offline/waitForSummary.spec.ts",
 		suite: "Offline tests that wait for a summary",
 		test: "applies stashed ops with no saved ops (map)",
-		lines: "243-281",
+		lines: "243-285",
 	})
 	.document(
 		document("collaboration", [rootDataStore], {
 			flushMode: "turnBased",
 			enableGroupedBatching: true,
-			enableBatchIdTracking: true,
 		}),
 	)
 	.clients(
@@ -207,19 +331,34 @@ export const stashedOpsWithoutSavedOps = fluidScenario(
 		interactiveClient("stashing-client"),
 		interactiveClient("resumed"),
 	)
-	.covers("container-load", "op-stream", "pending-state", "snapshot", "summarization")
+	.covers(
+		"container-load",
+		"op-ordering",
+		"pending-state",
+		"replay",
+		"snapshot",
+		"summarization",
+	)
 	.steps((s) => {
 		s.client("original").load({ from: { kind: "service" } });
 		s.client("summarizer").load({ from: { kind: "service" } });
 		s.client("summarizer").summarize({ id: "summary-1" });
-		s.service().acknowledgeSummary("summary-1", "snapshot-1");
+		s.sequence().summarize("seq-summary-op-1", "summarizer", "summary-1");
+		s.sequence().summaryAck("seq-summary-ack-1", "summary-1", "snapshot-1");
+		s.service().synchronize();
 
 		s.client("stashing-client").load({
 			from: { kind: "service", snapshot: "snapshot-1" },
 			deltaConnection: "none",
 		});
-		s.client("stashing-client").submitOperation(op("stashed-op"));
+		s.client("stashing-client").submitBatch({
+			id: "stashed-batch",
+			operations: [op("stashed-op")],
+		});
 		s.client("stashing-client").capturePendingState("stash-without-saved-ops");
+		s.note(
+			"The container never processed anything past its base snapshot, so the capture holds no saved ops and exactly one unsequenced local op.",
+		);
 		s.expectPendingState("stash-without-saved-ops").toContain({
 			captureKind: "pendingLocalState",
 			savedOps: 0,
@@ -235,9 +374,24 @@ export const stashedOpsWithoutSavedOps = fluidScenario(
 				mode: "online",
 			},
 		});
+		s.client("resumed").resubmitBatch({ batch: "stashed-batch", as: "stashed-batch-id" });
+		s.note(
+			"The replay carries a new client identity but the original batch identity, so the logical operation keeps one identity across two sessions.",
+		);
+		s.sequence().operations("seq-stashed", "resumed", ["stashed-op"], {
+			batch: "stashed-batch",
+			batchPosition: "single",
+			batchId: "stashed-batch-id",
+			clientSequence: 1,
+			virtualization: { grouped: true },
+		});
 		s.service().synchronize();
 		s.expectOperation("stashed-op").at("original").toBe("processed");
 		s.expectOperation("stashed-op").at("resumed").toBe("acked");
+		s.expectOperation("stashed-op").at("resumed").toBeAppliedTimes(1);
+		s.expectOperation("stashed-op").at("original").toBeAppliedTimes(1);
+		s.expectConvergence("original", "resumed");
+		s.expectTrace().toSatisfy();
 	});
 
 export const frozenOfflineRoundTrip = fluidScenario(
@@ -245,15 +399,14 @@ export const frozenOfflineRoundTrip = fluidScenario(
 )
 	.fromTest({
 		file: "packages/test/test-end-to-end-tests/src/test/offline/frozenOfflineRoundTrip.spec.ts",
-		suite: "Frozen offline pending-state round trip",
+		suite: "frozen container offline round-trip",
 		test: "captureFullContainerState → offline writable load → re-capture → online resume",
-		lines: "102-169",
+		lines: "102-170",
 	})
 	.document(
 		document("collaboration", [rootDataStore], {
 			flushMode: "turnBased",
 			enableGroupedBatching: true,
-			enableBatchIdTracking: true,
 			enableOfflineFull: true,
 		}),
 	)
@@ -262,7 +415,7 @@ export const frozenOfflineRoundTrip = fluidScenario(
 		interactiveClient("offline"),
 		interactiveClient("resumed"),
 	)
-	.covers("container-load", "op-stream", "pending-state", "snapshot")
+	.covers("container-load", "op-ordering", "pending-state", "replay", "snapshot")
 	.steps((s) => {
 		s.client("original").load({ from: { kind: "service" } });
 		s.service().captureFullContainerState("full-container-state");
@@ -285,15 +438,24 @@ export const frozenOfflineRoundTrip = fluidScenario(
 			environment: "frozen",
 			readonly: false,
 		});
+
+		const offlineOps = [0, 1, 2, 3, 4].map((index) => `offline-${index}`);
 		s.client("offline").submitBatch({
 			id: "offline-edits",
-			operations: [0, 1, 2, 3, 4].map((index) => op(`offline-${index}`)),
+			operations: offlineOps.map((id) => op(id)),
 		});
+		s.note(
+			"A frozen container has no path to the sequencer, so these operations can take effect locally but can never reach the total order from this session.",
+		);
+		for (const id of offlineOps) {
+			s.expectOperation(id).at("offline").toBe("pending");
+		}
 		s.client("offline").capturePendingState("layered-pending-state");
 		s.expectPendingState("layered-pending-state").toContain({
 			captureKind: "pendingLocalState",
+			savedOps: 0,
 			stashedOps: 5,
-			containsOperations: [0, 1, 2, 3, 4].map((index) => `offline-${index}`),
+			containsOperations: offlineOps,
 		});
 		s.client("offline").close();
 
@@ -304,21 +466,40 @@ export const frozenOfflineRoundTrip = fluidScenario(
 				mode: "online",
 			},
 		});
+		s.client("resumed").resubmitBatch({ batch: "offline-edits", as: "offline-edits-id" });
+		s.sequence().operations("seq-offline-edits", "resumed", offlineOps, {
+			batch: "offline-edits",
+			batchPosition: "single",
+			batchId: "offline-edits-id",
+			clientSequence: 1,
+			virtualization: { grouped: true },
+		});
+		s.expectBatch("offline-edits").toBeVirtualizedAs({
+			grouped: true,
+			compressed: false,
+			chunked: false,
+			originalOperationCount: 5,
+			wireMessages: 1,
+		});
 		s.service().synchronize();
-		for (let index = 0; index < 5; index++) {
-			s.expectOperation(`offline-${index}`).at("original").toBe("processed");
-			s.expectOperation(`offline-${index}`).at("resumed").toBe("acked");
+		for (const id of offlineOps) {
+			s.expectOperation(id).at("original").toBe("processed");
+			s.expectOperation(id).at("resumed").toBe("acked");
+			s.expectOperation(id).at("original").toBeAppliedTimes(1);
+			s.expectOperation(id).at("resumed").toBeAppliedTimes(1);
 		}
+		s.expectConvergence("original", "resumed");
+		s.expectTrace().toSatisfy();
 	});
 
 export const oldSummarizerFetchesLatestSnapshot = fluidScenario(
-	"older summarizer refreshes to the latest acknowledged snapshot",
+	"older summarizer refreshes when it processes the newer summary ack",
 )
 	.fromTest({
 		file: "packages/test/test-end-to-end-tests/src/test/summarization/summarizationFetchValidation.spec.ts",
 		suite: "Summarizer fetches expected number of times",
 		test: "Summarizer loading from an older summary should fetch latest summary",
-		lines: "169-218",
+		lines: "169-213",
 	})
 	.document(document("collaboration", [rootDataStore]))
 	.clients(
@@ -326,24 +507,40 @@ export const oldSummarizerFetchesLatestSnapshot = fluidScenario(
 		summarizerClient("summarizer-1"),
 		summarizerClient("summarizer-2"),
 	)
-	.covers("driver-contracts", "snapshot", "summarization")
+	.covers("driver-contracts", "op-ordering", "snapshot", "summarization")
 	.steps((s) => {
 		s.client("main").load({ from: { kind: "service" } });
 		s.client("summarizer-1").load({ from: { kind: "service" } });
 		s.client("summarizer-2").load({ from: { kind: "service" } });
+
 		s.client("main").submitOperation(op("before-summary"));
+		s.sequence().operations("seq-before-summary", "main", ["before-summary"]);
 		s.service().synchronize();
+
 		s.client("summarizer-1").summarize({ id: "summary-1" });
-		s.service().acknowledgeSummary("summary-1", "snapshot-1");
+		s.sequence().summarize("seq-summary-op-1", "summarizer-1", "summary-1");
+		s.sequence().summaryAck("seq-summary-ack-1", "summary-1", "snapshot-1");
 		s.expectSummary("summary-1").toBe("acked", { stage: "submit" });
+		s.note(
+			"Summary op, ack, and DataStore ops share one total order. The ack is a sequenced message, not an out-of-band service callback.",
+		);
 
 		s.client("main").submitOperation(op("ack-processing-trigger"));
+		s.sequence().operations("seq-ack-trigger", "main", ["ack-processing-trigger"]);
+		s.expectOrder("seq-summary-ack-1", "seq-ack-trigger");
+		s.note(
+			"The trailing operation exists only to pull each summarizer's processing cursor past the ack; without it the fetch would never be triggered.",
+		);
 		s.service().synchronize();
+		s.expectDelivery("summarizer-2").toBe({
+			processedThrough: { relation: "after", position: "seq-summary-ack-1" },
+		});
 		s.expectSnapshotFetch("summarizer-2").toBe({
 			purpose: "summaryAck",
 			count: 1,
 			snapshot: "snapshot-1",
 		});
+		s.expectTrace().toSatisfy();
 	});
 
 export const detachedSerializeAndRehydrate = fluidScenario(
@@ -353,7 +550,7 @@ export const detachedSerializeAndRehydrate = fluidScenario(
 		file: "packages/test/test-end-to-end-tests/src/test/deRehydrateContainerTests.spec.ts",
 		suite: "Dehydrate Rehydrate Container Test",
 		test: "Rehydrate container from snapshot and check contents before attach",
-		lines: "441-479",
+		lines: "441-478",
 	})
 	.document(document("collaboration", [rootDataStore]))
 	.clients(interactiveClient("detached"), interactiveClient("rehydrated"))
@@ -367,10 +564,17 @@ export const detachedSerializeAndRehydrate = fluidScenario(
 				snapshot: "serialized-detached-container",
 			},
 		});
+		s.note(
+			"No document exists yet, so the total order is empty and both containers sit at the baseline position.",
+		);
 		s.expectClient("rehydrated").toBe({
 			attach: "detached",
 			connection: "disconnected",
 			environment: "none",
+		});
+		s.expectDelivery("rehydrated").toBe({
+			loadedAt: { relation: "equal", position: "baseline" },
+			processedThrough: { relation: "equal", position: "baseline" },
 		});
 		s.expectDataStore("rehydrated", rootDataStore.id).toBe("loaded");
 	});
@@ -388,35 +592,50 @@ export const incrementalDataStoreSummaries = fluidScenario(
 		document("collaboration", [rootDataStore, { id: "secondary", initiallyVisible: false }]),
 	)
 	.clients(interactiveClient("main"), summarizerClient("summarizer"))
-	.covers("op-stream", "snapshot", "summarization")
+	.covers("op-stream", "op-ordering", "snapshot", "summarization")
 	.steps((s) => {
 		s.client("main").load({ from: { kind: "service" } });
 		s.client("summarizer").load({ from: { kind: "service" } });
 		s.client("main").createDataStore("secondary");
 		s.client("main").makeDataStoreVisible("secondary");
+
 		s.client("main").submitOperation(op("reference-secondary", rootDataStore.id));
 		s.client("main").submitOperation(op("seed-secondary", "secondary"));
+		s.sequence().operations("seq-reference-secondary", "main", ["reference-secondary"]);
+		s.sequence().operations("seq-seed-secondary", "main", ["seed-secondary"]);
 		s.service().synchronize();
 
 		s.client("summarizer").summarize({ id: "summary-1" });
-		s.service().acknowledgeSummary("summary-1", "snapshot-1");
+		s.sequence().summarize("seq-summary-op-1", "summarizer", "summary-1");
+		s.sequence().summaryAck("seq-summary-ack-1", "summary-1", "snapshot-1");
+		s.service().synchronize();
 		s.expectSummary("summary-1").toBe("acked", {
 			dataStores: { root: "tree", secondary: "tree" },
 		});
 
 		s.client("summarizer").summarize({ id: "summary-2" });
-		s.service().acknowledgeSummary("summary-2", "snapshot-2");
+		s.sequence().summarize("seq-summary-op-2", "summarizer", "summary-2");
+		s.sequence().summaryAck("seq-summary-ack-2", "summary-2", "snapshot-2");
+		s.service().synchronize();
+		s.note(
+			"No DataStore operation was sequenced between the two summaries, so both DataStores reuse handles.",
+		);
 		s.expectSummary("summary-2").toBe("acked", {
 			dataStores: { root: "handle", secondary: "handle" },
 		});
 
 		s.client("main").submitOperation(op("change-root-only"));
+		s.sequence().operations("seq-change-root-only", "main", ["change-root-only"]);
 		s.service().synchronize();
 		s.client("summarizer").summarize({ id: "summary-3" });
-		s.service().acknowledgeSummary("summary-3", "snapshot-3");
+		s.sequence().summarize("seq-summary-op-3", "summarizer", "summary-3");
+		s.sequence().summaryAck("seq-summary-ack-3", "summary-3", "snapshot-3");
+		s.service().synchronize();
+		s.expectOrder("seq-summary-ack-2", "seq-change-root-only");
 		s.expectSummary("summary-3").toBe("acked", {
 			dataStores: { root: "tree", secondary: "handle" },
 		});
+		s.expectTrace().toSatisfy();
 	});
 
 export const loadingGroupOfflineRefresh = fluidScenario(
@@ -426,7 +645,7 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 		file: "packages/test/test-end-to-end-tests/src/test/data-virtualization/groupIdOffline.spec.ts",
 		suite: "GroupId offline",
 		test: "GroupId offline with refresh",
-		lines: "269-410",
+		lines: "269-400",
 	})
 	.document(
 		document(
@@ -439,8 +658,7 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 			{
 				flushMode: "turnBased",
 				enableGroupedBatching: true,
-				enableBatchIdTracking: true,
-				enableDataVirtualization: true,
+				useLoadingGroupIdForSnapshotFetch: true,
 			},
 		),
 	)
@@ -454,7 +672,9 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 		"container-load",
 		"data-virtualization",
 		"driver-contracts",
+		"op-ordering",
 		"pending-state",
+		"replay",
 		"snapshot",
 		"summarization",
 	)
@@ -465,15 +685,44 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 		s.client("main").createDataStore("group-b");
 		s.client("main").makeDataStoreVisible("group-a");
 		s.client("main").makeDataStoreVisible("group-b");
-		s.client("main").submitOperation(op("group-a-initial", "group-a"));
-		s.client("main").submitOperation(op("group-b-initial", "group-b"));
-		s.service().synchronize();
-		s.client("summarizer").summarize({ id: "summary-1" });
-		s.service().acknowledgeSummary("summary-1", "snapshot-1");
 
-		s.client("reader").load({
-			from: { kind: "service", snapshot: "snapshot-1" },
+		s.note(
+			"The source test stores both handles on the root DataStore in one turn, so this is one batch targeting one DataStore.",
+		);
+		s.client("main").submitBatch({
+			id: "group-references",
+			operations: [
+				op("reference-group-a", rootDataStore.id),
+				op("reference-group-b", rootDataStore.id),
+			],
 		});
+		s.sequence().operations(
+			"seq-group-references",
+			"main",
+			["reference-group-a", "reference-group-b"],
+			{
+				batch: "group-references",
+				batchPosition: "single",
+				virtualization: { grouped: true },
+			},
+		);
+		s.note(
+			"Grouping puts both operations at one sequence position; because they target one DataStore they also dispatch as one bunch. Grouping and bunching are different splits.",
+		);
+		s.expectBunches("seq-group-references").toBe([
+			{
+				dataStore: rootDataStore.id,
+				operations: ["reference-group-a", "reference-group-b"],
+			},
+		]);
+		s.service().synchronize();
+
+		s.client("summarizer").summarize({ id: "summary-1" });
+		s.sequence().summarize("seq-summary-op-1", "summarizer", "summary-1");
+		s.sequence().summaryAck("seq-summary-ack-1", "summary-1", "snapshot-1");
+		s.service().synchronize();
+
+		s.client("reader").load({ from: { kind: "service", snapshot: "snapshot-1" } });
 		s.expectDataStore("reader", "group-a").toBe("unloaded");
 		s.expectDataStore("reader", "group-b").toBe("unloaded");
 		s.client("reader").realizeDataStore("group-a");
@@ -486,14 +735,31 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 
 		s.client("reader").submitOperation(op("group-a-online", "group-a"));
 		s.client("reader").submitOperation(op("group-b-online", "group-b"));
+		s.sequence().operations("seq-group-a-online", "reader", ["group-a-online"]);
+		s.sequence().operations("seq-group-b-online", "reader", ["group-b-online"]);
 		s.service().synchronize();
+
 		s.client("summarizer").summarize({ id: "summary-2" });
-		s.service().acknowledgeSummary("summary-2", "snapshot-2");
-		s.client("reader").requestLatestSnapshotRefresh();
+		s.sequence().summarize("seq-summary-op-2", "summarizer", "summary-2");
+		s.sequence().summaryAck("seq-summary-ack-2", "summary-2", "snapshot-2");
+		s.service().synchronize();
+		s.client("reader").requestLatestSnapshotRefresh("snapshot-2");
+		s.note(
+			"Refresh moves the reader's base snapshot forward to the second summary's reference position while its processing cursor stays ahead of it.",
+		);
+
 		s.client("reader").disconnect();
-		s.client("reader").submitOperation(op("group-a-offline", "group-a"));
-		s.client("reader").submitOperation(op("group-b-offline", "group-b"));
+		s.client("reader").submitBatch({
+			id: "loading-group-offline",
+			operations: [op("group-a-offline", "group-a"), op("group-b-offline", "group-b")],
+		});
 		s.client("reader").capturePendingState("loading-group-pending-state");
+		s.expectPendingState("loading-group-pending-state").toContain({
+			captureKind: "pendingLocalState",
+			savedOps: 2,
+			stashedOps: 2,
+			containsOperations: ["group-a-offline", "group-b-offline"],
+		});
 		s.client("reader").close();
 
 		s.client("resumed").load({
@@ -503,11 +769,11 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 				mode: "online",
 			},
 		});
-		s.client("resumed").disconnect();
-		s.expectSequence("resumed").toBe({
-			initial: { relation: "equal", summary: "summary-2" },
-			last: { relation: "after", summary: "summary-2" },
+		s.expectDelivery("resumed").toBe({
+			loadedAt: { relation: "equal", position: "seq-group-b-online" },
+			processedThrough: { relation: "after", position: "seq-group-b-online" },
 		});
+		s.client("resumed").disconnect();
 		s.client("resumed").realizeDataStore("group-a");
 		s.client("resumed").realizeDataStore("group-b");
 		s.expectSnapshotFetch("resumed").toBe({
@@ -516,11 +782,13 @@ export const loadingGroupOfflineRefresh = fluidScenario(
 			count: 0,
 		});
 		s.expectDataStore("resumed", "group-a").toBe("loaded", {
-			containsOperations: ["group-a-initial", "group-a-online", "group-a-offline"],
+			containsOperations: ["group-a-online", "group-a-offline"],
 		});
 		s.expectDataStore("resumed", "group-b").toBe("loaded", {
-			containsOperations: ["group-b-initial", "group-b-online", "group-b-offline"],
+			containsOperations: ["group-b-online", "group-b-offline"],
 		});
+		s.expectOperation("group-a-offline").at("resumed").toBe("pending");
+		s.expectTrace().toSatisfy();
 	});
 
 export const containerRuntimeDslScenarios: readonly FluidScenario[] = [

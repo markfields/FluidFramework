@@ -306,18 +306,21 @@
 				<ol>
 					<li><a href="#status">Status and purpose</a></li>
 					<li><a href="#dsl-primer">DSL primer</a></li>
+					<li><a href="#three-orders">The three orders</a></li>
 					<li><a href="#lineage">Fowler and Tickloom</a></li>
 					<li><a href="#scope">Scope and boundaries</a></li>
 					<li><a href="#architecture">Fluid architecture model</a></li>
 					<li><a href="#states">States and transitions</a></li>
+					<li><a href="#trace">The sequenced trace</a></li>
 					<li><a href="#grammar">Language grammar</a></li>
 					<li><a href="#semantic-model">Semantic model</a></li>
-					<li><a href="#validator">Validator</a></li>
+					<li><a href="#validator">Validator and invariants</a></li>
 					<li><a href="#example">Worked example</a></li>
 					<li><a href="#scenarios">Ten e2e restatements</a></li>
 					<li><a href="#extending">Extending the language</a></li>
 					<li><a href="#executor">Future executor</a></li>
 					<li><a href="#sources">Source map</a></li>
+					<li><a href="#limitations">Limitations</a></li>
 					<li><a href="#glossary">Glossary</a></li>
 				</ol>
 			</nav>
@@ -336,7 +339,7 @@
 						</div>
 						<div class="card">
 							<strong>Validation</strong>
-							Domain-level identifier, lifecycle, provenance, and option checks.
+							Domain-level identifier, lifecycle, provenance, and trace-invariant checks.
 						</div>
 						<div class="card">
 							<strong>Proof</strong>
@@ -347,15 +350,18 @@
 					<p>
 						The implementation is a <strong>descriptive proof of concept</strong>. It records
 						what a collaboration scenario means and validates whether that description is
-						representable. It does not yet execute the scenario against
-						<code>ITestObjectProvider</code>.
+						representable and internally consistent. It does not yet execute the scenario
+						against <code>ITestObjectProvider</code>.
 					</p>
 
 					<div class="callout warning">
-						<strong>Important:</strong> the validator is not a fake ordering service or a fake
-						Container Runtime. Expected observations remain explicit in the scenario. The
-						validator checks that referenced clients, operations, summaries, snapshots, and
-						captured states exist and that commands obey known lifecycle guards.
+						<strong>The boundary that matters:</strong> the DSL <em>declares</em> the sequenced
+						trace; it does not <em>decide</em> it. There is no simulated ordering service, no
+						ticket assignment, no leader election, and no storage emulation. But the abstract
+						sequencing contract — a single total order of messages carrying sequence number,
+						client id, client sequence number, reference sequence number, and minimum sequence
+						number, together with each client's position in that order — <em>is</em> modeled,
+						because without it most Container Runtime behavior cannot be stated at all.
 					</div>
 				</section>
 
@@ -378,11 +384,13 @@
 						<span class="pill">attach</span>
 						<span class="pill">disconnect</span>
 						<span class="pill">submit operation</span>
+						<span class="pill">sequence</span>
+						<span class="pill">deliver</span>
 						<span class="pill">synchronize</span>
 						<span class="pill">summarize</span>
-						<span class="pill">acknowledge summary</span>
+						<span class="pill">summary ack</span>
 						<span class="pill">capture pending state</span>
-						<span class="pill">rehydrate</span>
+						<span class="pill">resubmit</span>
 						<span class="pill">expect</span>
 					</p>
 
@@ -422,11 +430,77 @@
 							</tr>
 							<tr>
 								<td>Domain validator</td>
-								<td>Deterministic errors phrased in Fluid concepts.</td>
+								<td>Deterministic errors phrased in Fluid concepts, plus trace invariants.</td>
 								<td><code>validator.ts</code></td>
 							</tr>
 						</tbody>
 					</table>
+				</section>
+
+				<section id="three-orders">
+					<h2>The three orders</h2>
+					<p>
+						A Fluid scenario is a distributed execution, and its meaning lives in the gaps
+						between three different orders. An ordinary test script collapses all three into
+						JavaScript statement order and then hides the collapse behind a synchronization
+						helper.
+					</p>
+					<table>
+						<thead>
+							<tr>
+								<th>Order</th>
+								<th>Owned by</th>
+								<th>DSL verb</th>
+								<th>What it decides</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Submission order</td>
+								<td>Each client's own runtime</td>
+								<td><code>client(id).submitOperation / submitBatch / resubmitBatch</code></td>
+								<td>What a client offered, and in what local order.</td>
+							</tr>
+							<tr>
+								<td>Sequence order</td>
+								<td>The ordering service</td>
+								<td><code>sequence().operations / chunk / summarize / summaryAck / join</code></td>
+								<td>The single total order every client eventually agrees on.</td>
+							</tr>
+							<tr>
+								<td>Processing order and position</td>
+								<td>Each client's delta queue</td>
+								<td><code>service().deliver(id).through(pos)</code>, <code>service().synchronize(...)</code></td>
+								<td>How far each client has advanced through the total order.</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						Because the three are separate, the language can say things that were previously
+						inexpressible: an operation is ordered while the client that must observe it is
+						offline; two clients submit concurrently and the service picks a winner; a payload
+						occupies three sequenced positions but reconstructs into one logical operation at
+						the third; the same logical batch is submitted twice under two client identities
+						and must still be applied once.
+					</p>
+					<pre><code>s.concurrently((c) =&gt; {
+  c.client("alice").submitOperation({ id: "alice-edit", dataStore: "root" });
+  c.client("bob").submitOperation({ id: "bob-edit", dataStore: "root" });
+});
+
+// The service, not the statement above, decides the winner.
+s.sequence().operations("seq-bob", "bob", ["bob-edit"]);
+s.sequence().operations("seq-alice", "alice", ["alice-edit"]);
+s.expectOrder("seq-bob", "seq-alice");</code></pre>
+					<div class="callout">
+						Sequence positions are <strong>symbolic names</strong>, never integers. The order of
+						<code>sequence()</code> calls defines the sequence numbers. A scenario names only
+						the positions it later refers to, and refers to them through
+						<code>referenceSequence</code>, <code>minimumSequence</code>,
+						<code>pauseAt</code>, <code>deliver(...).through(...)</code>,
+						<code>expectOrder</code>, and <code>expectDelivery</code>. Two names are reserved:
+						<code>baseline</code> and <code>latest</code>.
+					</div>
 				</section>
 
 				<section id="lineage">
@@ -457,7 +531,10 @@
 							Each client scope is immutable; selecting Bob cannot change an earlier Alice scope.
 						</li>
 						<li>
-							Commands are inspectable records, not anonymous execution lambdas.
+							Commands are inspectable records, not anonymous execution lambdas. Tickloom's
+							<code>semanticmodel</code> package still holds <code>Action</code> lambdas,
+							process factories, and <code>ClusterEvent.introduceIn(cluster)</code>, so its
+							"semantic model" cannot be serialized, diffed, or analyzed without running it.
 						</li>
 						<li>
 							Persistent effects use honest verbs such as <code>pause</code>,
@@ -466,7 +543,18 @@
 						<li>
 							Identifiers and artifact provenance are validated before any future execution.
 						</li>
+						<li>
+							Ordering is <em>declared</em>, not coaxed. Tickloom nudges a simulated cluster
+							with delays and partitions and then discovers the interleaving it produced; a
+							scenario cannot state the interleaving it means. Here the interleaving is the
+							artifact and the simulator is absent.
+						</li>
 					</ul>
+					<p>
+						Tickloom's quorum and tick semantics are deliberately not borrowed. Fluid has a
+						single ordering service and a dense total order, not a replicated log with
+						per-replica clocks.
+					</p>
 				</section>
 
 				<section id="scope">
@@ -476,8 +564,15 @@
 						<li>container creation, attach, load, connect, disconnect, close;</li>
 						<li>intermediate connection states and requested connection mode;</li>
 						<li>DataStore creation, visibility, lazy realization, and opaque operations;</li>
-						<li>outbound batching and op virtualization;</li>
-						<li>sequencing, pending state, replay, resubmission, and local acknowledgement;</li>
+						<li>
+							the abstract sequencing contract: one total order of sequenced messages carrying
+							sequence number, client id, client sequence number, reference sequence number,
+							and minimum sequence number;
+						</li>
+						<li>protocol, summary, and DataStore message kinds as entries in that one order;</li>
+						<li>per-client delivery cursors, processing lag, and paused queues;</li>
+						<li>outbound batching and the logical-to-wire virtualization mapping;</li>
+						<li>pending state, replay, resubmission under a new client identity, and local acknowledgement;</li>
 						<li>summary generation, upload stage, broadcast, ack/nack, and handle reuse;</li>
 						<li>snapshot selection, refresh, and loading-group fetches;</li>
 						<li>ordinary pending-local-state capture and self-contained full-container capture;</li>
@@ -488,16 +583,34 @@
 					<ul>
 						<li>DDS-specific operation semantics;</li>
 						<li>concrete driver implementations, endpoint names, token shapes, or cache internals;</li>
-						<li>a simulated ordering service or storage service;</li>
-						<li>automatic proof that an expectation is behaviorally true;</li>
-						<li>full GC, aliasing, staging mode, and signal APIs in the first prototype.</li>
+						<li>
+							any <em>implementation</em> of an ordering or storage service: no ticketing, no
+							leader election, no server-side minimum-sequence computation, no snapshot storage
+							emulation;
+						</li>
+						<li>quorum proposal/accept/reject consensus;</li>
+						<li>deciding what a real service would have done with a given set of submissions;</li>
+						<li>full GC, aliasing, blob attach, staging mode, and signal APIs in the first prototype.</li>
 					</ul>
+
+					<div class="callout warning">
+						<strong>Do not confuse these two.</strong> "Do not model a concrete orderer" and "do
+						not model ordering" are different statements. An earlier draft of this design
+						conflated them and listed "a simulated ordering service" as out of scope in a way
+						that read as "sequencing is out of scope." The result was a language that could not
+						say that an operation was ordered while a peer was offline, could not distinguish
+						submission from sequencing, and could not state that a replayed batch must be
+						applied once. The abstract sequencing boundary is squarely in scope; only its
+						implementation is not.
+					</div>
 
 					<div class="callout">
 						The DataStore/DDS boundary is intentional. A scenario may say that operation
 						<code>offline-3</code> targets DataStore <code>root</code>, but it does not say
 						whether that operation is a map set, counter increment, tree edit, or sequence
-						change.
+						change. Container and protocol message kinds are not opaque in the same way,
+						because batch markers, chunk markers, summary ops, and joins are exactly what the
+						Container Runtime reasons about.
 					</div>
 				</section>
 
@@ -521,17 +634,44 @@
 					<p>
 						Pending state stores the original unvirtualized runtime operations, including batch
 						information and local metadata. That is why replay expectations use logical batch and
-						operation identifiers rather than wire chunks.
+						operation identifiers rather than wire chunks. Resubmission assigns a fresh client
+						sequence number and a fresh reference sequence number, which is why the DSL scopes
+						client-sequence monotonicity to a connection epoch.
 					</p>
 
 					<h3>Inbound operation pipeline</h3>
 					<div class="flow">
 						<span>sequenced message</span><b>→</b><span>unchunk</span><b>→</b>
-						<span>decompress</span><b>→</b><span>ungroup</span><b>→</b>
+						<span>decompress</span><b>→</b><span>unroll</span><b>→</b><span>ungroup</span><b>→</b>
+						<span>batch classification</span><b>→</b>
+						<span>duplicate batch detection</span><b>→</b>
 						<span>pending-state reconciliation</span><b>→</b>
 						<span>ContainerRuntime dispatch</span><b>→</b>
 						<span>ChannelCollection</span><b>→</b><span>DataStore</span>
 					</div>
+					<p>
+						Two facts from this pipeline shape the trace model. Grouping collapses a whole batch
+						into <strong>one</strong> sequenced message, and ungrouping clones the outer message
+						so every inner operation shares the outer sequence number while receiving a synthetic
+						inner client sequence number. Chunking does the opposite: it spreads one payload
+						across <strong>many</strong> sequenced messages, and only the final chunk carries the
+						reconstructed payload, its original type, its metadata, and its compression marker.
+						A boolean "chunked: true" cannot express either fact; a wire-message list can.
+					</p>
+
+					<h3>Batch identity and duplicate detection</h3>
+					<div class="flow">
+						<span>explicit batchId</span><b>or</b>
+						<span>derived <code>clientId_[batchStartCsn]</code></span><b>→</b>
+						<span>DuplicateBatchDetector</span><b>→</b>
+						<span>discard repeat</span><b>/</b><span>DataCorruptionError</span>
+					</div>
+					<p>
+						When a container rehydrates pending state under a new client identity, preserving the
+						original batch identity is the only thing that lets peers reject the second copy.
+						The DSL therefore treats a repeat as a declared <code>duplicateOf</code> relationship
+						and rejects a replay whose identity does not match the original.
+					</p>
 
 					<h3>Summary pipeline</h3>
 					<div class="flow">
@@ -577,6 +717,38 @@
 						produces an attached container.
 					</p>
 
+					<h3>Membership and catch-up</h3>
+					<p>
+						A client is <code>catchingUp</code> from the moment it obtains a connection until it
+						has processed its own join message. Stating membership is opt-in per client: declare
+						a <code>join</code> entry for a client and it passes through <code>catchingUp</code>;
+						say nothing and connecting is a single step. A scenario pays for the precision only
+						where it needs it.
+					</p>
+					<pre><code>s.client("reader").load({ from: { kind: "service" } });
+s.expectClient("reader").toBe({ connection: "catchingUp" });
+
+s.sequence().join("seq-reader-join", "reader");
+s.expectClient("reader").toBe({ connection: "connected" });
+s.expectDelivery("reader").toBe({
+  processedThrough: { relation: "equal", position: "seq-reader-join" },
+});</code></pre>
+					<p>
+						The join carries three facts at once, matching
+						<code>connectionStateHandler.ts</code>: the client is live from that position, it has
+						processed everything ordered before it, and only from there can its own submissions
+						be sequenced. A container whose inbound queue is paused stays
+						<code>catchingUp</code>, because it has not processed its own join.
+					</p>
+					<p>
+						Losing a connection does not retire a membership; only a sequenced
+						<code>leave</code> does. A reconnecting client therefore waits for its own leave
+						before it is live again, and until then the retiring membership still pins the
+						collaboration window at its old reference position. Because that leave often arrives
+						after the replacement connection is established, it is legal as soon as the client is
+						no longer <code>connected</code>.
+					</p>
+
 					<h3>Connection state is not connection mode</h3>
 					<table>
 						<thead>
@@ -589,8 +761,8 @@
 						<tbody>
 							<tr>
 								<td>Connection state</td>
-								<td>Disconnected, EstablishingConnection, CatchingUp, Connected</td>
-								<td>Describes Loader connection/catch-up lifecycle.</td>
+								<td>disconnected, catchingUp, connected</td>
+								<td>Describes the Loader connection and catch-up lifecycle.</td>
 							</tr>
 							<tr>
 								<td>Mode</td>
@@ -610,11 +782,54 @@
 						</tbody>
 					</table>
 
-					<h3>Operation states</h3>
+					<h3>Operation states are relative to a client and a cursor</h3>
 					<p>
-						The prototype uses expectation vocabulary rather than attempting a full simulator:
-						<code>pending</code>, <code>sequenced</code>, <code>processed</code>,
-						<code>acked</code>, and <code>notProcessed</code>.
+						The five delivery states are mutually exclusive. Local optimistic application is
+						checked separately with <code>toBeAppliedTimes</code>, so a locally applied operation
+						can still be <code>pending</code> until it enters and returns through the trace.
+					</p>
+					<table>
+						<thead>
+							<tr>
+								<th>State</th>
+								<th>Meaning</th>
+								<th>How the validator derives it</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>pending</code></td>
+								<td>Offered by this client, not yet ordered.</td>
+								<td>In the client's outstanding submission list.</td>
+							</tr>
+							<tr>
+								<td><code>sequenced</code></td>
+								<td>Has a position this client has not reached.</td>
+								<td>In the trace, beyond this client's processing cursor.</td>
+							</tr>
+							<tr>
+								<td><code>processed</code></td>
+								<td>This client advanced through another client's operation.</td>
+								<td>Cursor at or past the entry, with applied count at least one.</td>
+							</tr>
+							<tr>
+								<td><code>acked</code></td>
+								<td>This client submitted it and processed its own sequenced copy.</td>
+								<td>Cursor at or past the entry, with this client as submitter.</td>
+							</tr>
+							<tr>
+								<td><code>notProcessed</code></td>
+								<td>Neither pending here nor present in the sequenced trace.</td>
+								<td>No outstanding local submission and no sequenced position.</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						Local application is optimistic: a submitted operation takes effect at its submitter
+						immediately, and processing its own sequenced copy is an acknowledgement rather than
+						a second application. A container that loads at a position holds the effect of
+						everything sequenced up to that position. Both rules are what make
+						<code>exactlyOnceApplication</code> a meaningful claim across stash and replay.
 					</p>
 
 					<h3>Summary states and stages</h3>
@@ -653,6 +868,176 @@
 					</p>
 				</section>
 
+				<section id="trace">
+					<h2>The sequenced trace</h2>
+					<p>
+						A scenario's trace is the ordered list of <code>sequence()</code> entries recorded in
+						its steps. The index of an entry <em>is</em> its sequence number; its name is how
+						everything else refers to it.
+					</p>
+
+					<h3>Entry kinds</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Kind</th>
+								<th>Fluid counterpart</th>
+								<th>Carries</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>operations</code></td>
+								<td><code>MessageType.Operation</code> carrying runtime ops</td>
+								<td>Reconstructed logical operations, batch membership and markers, batch identity, virtualization.</td>
+							</tr>
+							<tr>
+								<td><code>operations</code> with a non-final chunk</td>
+								<td><code>ContainerMessageType.ChunkedOp</code></td>
+								<td>Nothing. A non-final chunk reconstructs no logical operation.</td>
+							</tr>
+							<tr>
+								<td><code>join</code></td>
+								<td><code>MessageType.ClientJoin</code></td>
+								<td>
+									The point a client becomes a live member, has processed everything ordered
+									before it, and may have its own submissions sequenced.
+								</td>
+							</tr>
+							<tr>
+								<td><code>leave</code></td>
+								<td><code>MessageType.ClientLeave</code></td>
+								<td>Retires a disconnected client, releasing the collaboration window it pinned.</td>
+							</tr>
+							<tr>
+								<td><code>noop</code></td>
+								<td><code>MessageType.NoOp</code></td>
+								<td>Moves a live client's reference position without carrying an operation.</td>
+							</tr>
+							<tr>
+								<td><code>summarize</code></td>
+								<td><code>MessageType.Summarize</code></td>
+								<td>The summary being broadcast, at the summarizer's reference position.</td>
+							</tr>
+							<tr>
+								<td><code>summaryAck</code></td>
+								<td><code>MessageType.SummaryAck</code></td>
+								<td>The summary op it answers and the snapshot handle it publishes.</td>
+							</tr>
+							<tr>
+								<td><code>summaryNack</code></td>
+								<td><code>MessageType.SummaryNack</code></td>
+								<td>The summary op it rejects and an optional retry delay.</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<h3>Ordering metadata, symbolically</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Wire field</th>
+								<th>DSL form</th>
+								<th>Default</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>sequenceNumber</code></td>
+								<td>the entry's position in the trace</td>
+								<td>assigned by declaration order</td>
+							</tr>
+							<tr>
+								<td><code>clientId</code></td>
+								<td><code>client</code></td>
+								<td>required, except for service-generated entries</td>
+							</tr>
+							<tr>
+								<td><code>clientSequenceNumber</code></td>
+								<td><code>clientSequence</code></td>
+								<td>omitted unless the scenario asserts something about it</td>
+							</tr>
+							<tr>
+								<td><code>referenceSequenceNumber</code></td>
+								<td><code>referenceSequence</code>: a position name or <code>"baseline"</code></td>
+								<td>the submitter's cursor when it offered the operation; the latest prior entry for a service-generated message</td>
+							</tr>
+							<tr>
+								<td><code>minimumSequenceNumber</code></td>
+								<td><code>minimumSequence</code>: a position name or <code>"baseline"</code></td>
+								<td>carried forward from the previous entry</td>
+							</tr>
+							<tr>
+								<td><code>metadata.batch</code></td>
+								<td><code>batchPosition</code>: single, start, continuation, end</td>
+								<td>unmarked</td>
+							</tr>
+							<tr>
+								<td><code>metadata.batchId</code></td>
+								<td><code>batchId</code></td>
+								<td>derived <code>client_[clientSequence]</code></td>
+							</tr>
+							<tr>
+								<td>grouping, compression, chunking</td>
+								<td><code>virtualization</code></td>
+								<td>none</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<h3>One logical batch, three sequenced messages</h3>
+					<pre><code>s.client("writer").submitBatch({
+  id: "large-batch",
+  operations: [
+    { id: "large-op-0", dataStore: "root", sizeInBytes: 100 },
+    { id: "large-op-1", dataStore: "root", sizeInBytes: 100 },
+    { id: "large-op-2", dataStore: "root", sizeInBytes: 100 },
+  ],
+});
+
+s.sequence().chunk("seq-chunk-1", "writer", { batch: "large-batch", index: 1, count: 3 });
+s.sequence().chunk("seq-chunk-2", "writer", { batch: "large-batch", index: 2, count: 3 });
+s.sequence().operations("seq-chunk-3", "writer", [
+  "large-op-0", "large-op-1", "large-op-2",
+], {
+  batch: "large-batch",
+  virtualization: { grouped: true, compressed: true, chunk: { index: 3, count: 3 } },
+});
+
+s.service().deliver("reader").through("seq-chunk-2");
+s.expectOperation("large-op-0").at("reader").toBe("notProcessed");</code></pre>
+					<p>
+						A reader holding two of three chunks has reconstructed nothing. That is what makes
+						"reconnects while processing chunks" a real test and why the language needs a wire
+						message concept rather than a boolean.
+					</p>
+
+					<h3>Replay must not apply twice</h3>
+					<pre><code>s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
+s.sequence().operations("seq-first-replay", "resumed", ["edit"], {
+  batch: "edit-batch", batchPosition: "single", batchId: "edit-batch-id",
+  clientSequence: 1, virtualization: { grouped: true },
+});
+
+// The client reconnects before it processed its own acknowledgement.
+s.client("resumed").disconnect();
+s.client("resumed").connect();
+s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
+s.sequence().operations("seq-second-replay", "resumed", ["edit"], {
+  batch: "edit-batch", batchPosition: "single", batchId: "edit-batch-id",
+  clientSequence: 1, duplicateOf: "seq-first-replay",
+  virtualization: { grouped: true },
+});
+
+s.expectOperation("edit").at("peer").toBeAppliedTimes(1);</code></pre>
+					<p>
+						Omit <code>duplicateOf</code> and the validator reports that the identity was already
+						sequenced. Change the identity and it reports that a replay under a new client
+						identity must preserve the original batch id, because otherwise no peer could reject
+						the repeat.
+					</p>
+				</section>
+
 				<section id="grammar">
 					<h2>Language grammar</h2>
 					<h3>Top-level form</h3>
@@ -684,8 +1069,18 @@
 						<tbody>
 							<tr>
 								<td><code>s.client(id)</code></td>
-								<td>load, attach, submit, summarize, capture, realize, close</td>
+								<td>load, attach, submit, resubmit, summarize, capture, realize, close</td>
 								<td>Container/ContainerRuntime instance</td>
+							</tr>
+							<tr>
+								<td><code>s.concurrently(...)</code></td>
+								<td>submissions with no relative order</td>
+								<td>Several clients at once</td>
+							</tr>
+							<tr>
+								<td><code>s.sequence()</code></td>
+								<td>operations, chunk, join, leave, noop, summarize, summaryAck, summaryNack</td>
+								<td>The abstract sequencer: one total order</td>
 							</tr>
 							<tr>
 								<td><code>s.processing(id)</code></td>
@@ -694,16 +1089,26 @@
 							</tr>
 							<tr>
 								<td><code>s.service()</code></td>
-								<td>synchronize, summary ack/nack, full-container capture</td>
+								<td>deliver, synchronize, completeAttach, full-container capture</td>
 								<td>Abstract service/driver boundary</td>
 							</tr>
 							<tr>
 								<td><code>s.expect…</code></td>
-								<td>client, op, batch, summary, snapshot, sequence, DataStore</td>
-								<td>Observation recorded in the IR</td>
+								<td>client, operation, batch, summary, snapshot, delivery, order, convergence, trace, DataStore</td>
+								<td>Observation checked against the declared trace</td>
 							</tr>
 						</tbody>
 					</table>
+
+					<h3>The verb tells you which order you are talking about</h3>
+					<pre><code>s.client("writer").submitOperation({ id: "edit", dataStore: "root" });  // submission
+s.sequence().operations("seq-edit", "writer", ["edit"]);                // sequencing
+s.service().deliver("reader").through("seq-edit");                      // processing</code></pre>
+					<p>
+						Nothing forces all three to happen, and that is the point. An operation can be
+						submitted and never ordered; ordered and never delivered; delivered to one client
+						and not another.
+					</p>
 
 					<h3>Immutable client scopes</h3>
 					<pre><code>const alice = s.client("alice");
@@ -732,42 +1137,153 @@ alice.connect();</code></pre>
 					<pre><code>{
   "kind": "command",
   "command": {
-    "kind": "submitBatch",
-    "client": "writer",
-    "batch": {
-      "id": "large-batch",
-      "operations": [
-        { "id": "large-op-0", "dataStore": "root", "sizeInBytes": 100 }
-      ]
+    "kind": "sequence",
+    "entry": {
+      "kind": "operations",
+      "at": "seq-chunk-3",
+      "client": "writer",
+      "operations": ["large-op-0", "large-op-1", "large-op-2"],
+      "batch": "large-batch",
+      "virtualization": {
+        "grouped": true,
+        "compressed": true,
+        "chunk": { "index": 3, "count": 3 }
+      }
     }
   }
 }</code></pre>
 					<p>
 						Because the IR contains no closures, loaders, containers, driver objects, or test
 						provider instances, it can be serialized, diffed, rendered, analyzed, or consumed by
-						a later executor.
+						a later executor. The trace is simply the ordered subsequence of
+						<code>sequence</code> commands, so a scenario remains a single flat timeline.
 					</p>
 				</section>
 
 				<section id="validator">
 					<h2>Deterministic domain validator</h2>
-					<p>The validator currently checks:</p>
+					<p>
+						The validator is a <strong>trace checker</strong>, not a simulator. It never chooses
+						an order. It replays the declared timeline, maintaining for each client a base
+						position, a processing cursor, an outstanding submission list, and an applied-operation
+						multiset, and then rejects declarations that violate the Fluid sequencing contract.
+					</p>
+
+					<h3>Structural and lifecycle checks</h3>
 					<ul>
-						<li>unique client, DataStore, operation, batch, summary, snapshot, and capture IDs;</li>
+						<li>unique client, DataStore, operation, batch, summary, snapshot, capture, and position names;</li>
 						<li>all references point to previously declared or produced artifacts;</li>
 						<li>load, attach, connect, disconnect, close, submit, summarize, and capture guards;</li>
 						<li>serialized detached/attaching provenance;</li>
 						<li>frozen load requires <code>captureFullContainerState</code> output;</li>
-						<li>compression requires grouped batching;</li>
-						<li>chunking requires compression;</li>
-						<li>loading groups require data virtualization;</li>
+						<li>compression requires grouped batching; chunking requires compression;</li>
+						<li>an explicit batch identity requires tracking derived from turn-based flushing and grouped batching, unless the disable gate is set;</li>
+						<li>loading groups require the loading-group snapshot-fetch feature gate;</li>
 						<li>writable frozen flow requires turn-based flush, grouped batching, and batch IDs;</li>
-						<li>full-container capture and loading groups are currently incompatible.</li>
+						<li>full-container capture and loading groups are currently incompatible;</li>
+						<li>snapshot refresh adopts an existing acknowledged snapshot and never produces one.</li>
 					</ul>
 
-					<h3>Example error</h3>
+					<h3>Sequencing checks</h3>
+					<ul>
+						<li>a message only reaches the total order if its submitter is attached, service-backed, connected, and not behind a paused outbound queue;</li>
+						<li>a read-mode connection may hold pending local work but cannot place it in the total order until it transitions to write mode;</li>
+						<li>an entry may only carry operations its named client actually has outstanding;</li>
+						<li>a cursor only moves forward, never past a pinned position, never into a paused inbound queue, never on a disconnected or frozen container.</li>
+					</ul>
+
+					<h3>Trace invariants</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Invariant</th>
+								<th>What it rules out</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>denseTotalOrder</code></td>
+								<td>Duplicate or unresolvable position names, reserved names used as positions.</td>
+							</tr>
+							<tr>
+								<td><code>clientSequenceMonotonic</code></td>
+								<td>Client sequence numbers that stall or regress inside one connection.</td>
+							</tr>
+							<tr>
+								<td><code>batchContiguity</code></td>
+								<td>Interleaved batches, mixed submitters, mixed reference positions, malformed begin/end markers.</td>
+							</tr>
+							<tr>
+								<td><code>causalReferenceSequence</code></td>
+								<td>Referencing a position the submitter had not processed, or its own position.</td>
+							</tr>
+							<tr>
+								<td><code>minimumSequenceMonotonic</code></td>
+								<td>
+									A collaboration window that moves backwards, overtakes its submitter, or
+									passes the least reference position among live write clients.
+								</td>
+							</tr>
+							<tr>
+								<td><code>wireReconstruction</code></td>
+								<td>Chunk runs with gaps, interleaving, or silent truncation.</td>
+							</tr>
+							<tr>
+								<td><code>exactlyOnceApplication</code></td>
+								<td>A logical operation applied twice, including across replay under a new client identity.</td>
+							</tr>
+							<tr>
+								<td><code>orderedDelivery</code></td>
+								<td>Rewound cursors and delivery a container could not have received.</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<h3>Every invariant name is backed by a real check</h3>
+					<p>
+						<code>expectTrace().toSatisfy([...])</code> is a checkpoint, not a comment. Some
+						violations are accumulated while the timeline is replayed and attributed to the
+						invariant they belong to; others are computed over the trace when the checkpoint
+						runs. Naming a subset evaluates that subset at that point in the timeline, and a
+						final sweep evaluates everything once, so nothing can hide by not being asked for.
+						Each violation is reported once, at the step that caused it.
+					</p>
+
+					<h3>Derived expectations</h3>
+					<p>
+						Expectations the validator can compute are computed and compared, not trusted.
+						Client state, operation states, application counts, delivery positions, batch
+						virtualization, dispatch bunches, saved/stashed op counts, summary state, DataStore
+						contents, and convergence all fall into this category. Only genuinely external
+						observations remain declarative: snapshot fetch counts, summary tree/handle reuse,
+						DataStore realization, and summary stage.
+					</p>
+
+					<h3>Bunches</h3>
+					<p>
+						Grouping puts a whole batch at one sequence position, and the Container Runtime then
+						splits that message into contiguous runs before dispatch, starting a new run whenever
+						the target DataStore changes. Returning to a DataStore after leaving it starts a new
+						bunch; bunches are contiguous runs, not per-DataStore totals.
+					</p>
+					<pre><code>s.expectBunches("seq-interleaved").toBe([
+  { dataStore: "root", operations: ["root-0", "root-1"] },
+  { dataStore: "secondary", operations: ["second-0"] },
+  { dataStore: "root", operations: ["root-2"] },
+]);</code></pre>
+
+					<h3>Example errors</h3>
 					<pre><code>steps[2]: Client 'alice' cannot submit runtime operations while detached.
-clients: Client 'alice' is declared more than once.</code></pre>
+steps[7]: 'reader' has not processed 'value-while-reader-disconnected';
+          it is sequenced but not processed here.
+steps[9]: 'alice' is disconnected, so nothing it submitted can be sequenced
+          until it reconnects and resubmits.
+steps[11]: Reference sequence 'seq-bob' is ahead of what 'alice' had processed
+           when it produced 'seq-alice'.
+trace: Chunk run 'writer:large-batch:3' delivered 2 of 3 chunks and was never
+       reconstructed. Either sequence the remaining chunks or disconnect the
+       submitter to abandon them.
+trace: 'peer' applied logical operation 'edit' 2 times.</code></pre>
 					<p>
 						These errors are intentionally expressed in domain vocabulary rather than as a
 						null dereference or a test-harness stack trace.
@@ -783,36 +1299,54 @@ clients: Client 'alice' is declared more than once.</code></pre>
     file: "packages/test/test-end-to-end-tests/src/test/container.spec.ts",
     suite: "Container",
     test: "can control op processing with connect() and disconnect()",
+    lines: "374-447",
   })
   .document(document("collaboration", [{ id: "root", root: true }]))
   .clients(interactiveClient("writer"), interactiveClient("reader"))
-  .covers("container-lifecycle", "op-stream")
+  .covers("container-lifecycle", "op-stream", "op-ordering")
   .steps((s) =&gt; {
     s.client("writer").load({ from: { kind: "service" } });
     s.client("reader").load({ from: { kind: "service" } });
+    s.expectClient("reader").toBe({ connection: "catchingUp" });
+    s.sequence().join("seq-reader-join", "reader");
+    s.expectClient("reader").toBe({ connection: "connected" });
 
-    s.client("writer").submitOperation({
-      id: "initial-value",
-      dataStore: "root",
-    });
+    s.client("writer").submitOperation({ id: "initial-value", dataStore: "root" });
+    s.sequence().operations("seq-initial", "writer", ["initial-value"]);
     s.service().synchronize();
     s.expectOperation("initial-value").at("reader").toBe("processed");
 
     s.client("reader").disconnect();
+    s.expectClient("reader").toBe({ connection: "disconnected" });
+    s.sequence().leave("seq-reader-leave", "reader");
+
     s.client("writer").submitOperation({
-      id: "while-disconnected",
+      id: "value-while-reader-disconnected",
       dataStore: "root",
     });
-    s.service().synchronize("writer");
-    s.expectOperation("while-disconnected")
-      .at("reader")
-      .toBe("notProcessed");
+    s.sequence().operations("seq-while-disconnected", "writer", [
+      "value-while-reader-disconnected",
+    ]);
+    s.note(
+      "The operation is ordered by the service even though the reader is not " +
+      "there to receive it. Sequencing and per-client processing are different events.",
+    );
+    s.service().deliver("writer").through("latest");
+    s.expectOperation("value-while-reader-disconnected").at("writer").toBe("acked");
+    s.expectOperation("value-while-reader-disconnected").at("reader").toBe("sequenced");
+    s.expectDelivery("reader").toBe({
+      processedThrough: { relation: "equal", position: "seq-initial" },
+    });
 
     s.client("reader").connect();
+    s.sequence().join("seq-reader-rejoin", "reader");
+    s.expectOperation("value-while-reader-disconnected").at("reader").toBe("processed");
+    s.expectDelivery("reader").toBe({
+      processedThrough: { relation: "equal", position: "seq-reader-rejoin" },
+    });
     s.service().synchronize();
-    s.expectOperation("while-disconnected")
-      .at("reader")
-      .toBe("processed");
+    s.expectConvergence("writer", "reader");
+    s.expectTrace().toSatisfy();
   });</code></pre>
 
 					<h3>What disappeared from the original test?</h3>
@@ -823,9 +1357,35 @@ clients: Client 'alice' is declared more than once.</code></pre>
 						<li>DDS event and timeout wiring;</li>
 						<li>DDS value details.</li>
 					</ul>
+
+					<h3>What appeared that version 1 could not say</h3>
+					<ul>
+						<li>
+							the operation reached the total order at position
+							<code>seq-while-disconnected</code> while the reader was offline — previously the
+							scenario could only say "synchronize the writer" and hope the reader stayed behind;
+						</li>
+						<li>
+							the reader's processing position is pinned at <code>seq-initial</code>, an
+							assertion about a cursor rather than about a boolean;
+						</li>
+						<li>
+							the writer <em>acked</em> its own operation while the reader had not processed it,
+							which is a statement about two different positions in one order;
+						</li>
+						<li>
+							the reader's membership: it is <code>catchingUp</code> until its own join is
+							ordered, it leaves the collaboration when its connection drops, and rejoining is
+							what carries it past the operation it missed;
+						</li>
+						<li>
+							the two clients converge at the end, which the validator checks by comparing
+							cursors and applied-operation multisets.
+						</li>
+					</ul>
 					<p>
-						What remains is the architectural intent: two clients, a disconnection boundary, an
-						op submitted while disconnected, and catch-up after reconnect.
+						Delete the final <code>synchronize()</code> and the validator reports three separate
+						domain errors instead of silently passing.
 					</p>
 				</section>
 
@@ -837,7 +1397,7 @@ clients: Client 'alice' is declared more than once.</code></pre>
 								<th>#</th>
 								<th>Scenario</th>
 								<th>Source test</th>
-								<th>Breadth</th>
+								<th>What the trace model adds</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -845,67 +1405,71 @@ clients: Client 'alice' is declared more than once.</code></pre>
 								<td>1</td>
 								<td>Disconnect gates inbound operation processing</td>
 								<td><code>container.spec.ts</code></td>
-								<td>connection lifecycle, op catch-up</td>
+								<td>An op ordered while the reader is offline; membership stated through join and leave; rejoining is the catch-up point.</td>
 							</tr>
 							<tr>
 								<td>2</td>
-								<td>Paused load at a summary sequence</td>
+								<td>Load pinned at the summary's reference position</td>
 								<td><code>loadModes.spec.ts</code></td>
-								<td>summary snapshot, point-in-time load</td>
+								<td>Five wire messages with begin/end markers; the snapshot's base position distinguished from the summary op and its ack.</td>
 							</tr>
 							<tr>
 								<td>3</td>
-								<td>Grouping, compression, and chunking</td>
+								<td>Grouped, compressed batch across three chunks</td>
 								<td><code>compression.spec.ts</code></td>
-								<td>op virtualization</td>
+								<td>Three logical ops, three sequenced messages, reconstruction only at the third; a reader holding two chunks has nothing.</td>
 							</tr>
 							<tr>
 								<td>4</td>
-								<td>Reentrant pending-batch rebase</td>
+								<td>Reentrant pending batches replayed in order</td>
 								<td><code>pendingBatchReentry.spec.ts</code></td>
-								<td>pending batches, ordering, replay</td>
+								<td>Ops pending because a read connection orders nothing; explicit order assertion across the replay.</td>
 							</tr>
 							<tr>
 								<td>5</td>
 								<td>Stashed ops with no saved ops</td>
 								<td><code>offline/waitForSummary.spec.ts</code></td>
-								<td>summary baseline, stash, online resume</td>
+								<td>Saved and stashed counts derived from the cursor and the base position; replay under a new client identity applied once.</td>
 							</tr>
 							<tr>
 								<td>6</td>
 								<td>Writable frozen/offline round trip</td>
 								<td><code>offline/frozenOfflineRoundTrip.spec.ts</code></td>
-								<td>full capture, offline edits, replay</td>
+								<td>A frozen container cannot reach the sequencer at all; five offline ops become one grouped message on resume.</td>
 							</tr>
 							<tr>
 								<td>7</td>
-								<td>Older summarizer fetches latest snapshot</td>
+								<td>Older summarizer refreshes on the ack</td>
 								<td><code>summarizationFetchValidation.spec.ts</code></td>
-								<td>summary ack, storage fetch contract</td>
+								<td>The summary ack is a sequenced entry; the trailing op exists only to pull cursors past it.</td>
 							</tr>
 							<tr>
 								<td>8</td>
 								<td>Detached serialize and rehydrate</td>
 								<td><code>deRehydrateContainerTests.spec.ts</code></td>
-								<td>detached lifecycle, local snapshot</td>
+								<td>An empty total order stated explicitly: both containers sit at the baseline position.</td>
 							</tr>
 							<tr>
 								<td>9</td>
 								<td>Incremental DataStore summaries</td>
 								<td><code>summarizeIncrementally.spec.ts</code></td>
-								<td>tree versus handle reuse</td>
+								<td>Handle reuse justified by the absence of any DataStore entry between two summary ops.</td>
 							</tr>
 							<tr>
 								<td>10</td>
 								<td>Loading-group offline refresh</td>
 								<td><code>data-virtualization/groupIdOffline.spec.ts</code></td>
-								<td>lazy snapshot fetch, refresh, pending state</td>
+								<td>Snapshot refresh moves the base position forward while the cursor stays ahead of it; one grouped message dispatches as two per-DataStore bunches.</td>
 							</tr>
 						</tbody>
 					</table>
 					<p>
 						All definitions are in <code>scenarios.ts</code>, and each scenario carries its
 						source file, suite, test name, line range, and coverage tags.
+						<code>fluidScenarioDsl.spec.ts</code> adds focused positive and negative tests for
+						explicit sequencing, submission versus sequencing, processing lag, replay and
+						exactly-once application, wire reconstruction, ordering metadata, and summaries in
+						the op stream.
 					</p>
 				</section>
 
@@ -934,13 +1498,12 @@ clients: Client 'alice' is declared more than once.</code></pre>
 					<h3>Candidate next surfaces</h3>
 					<ul>
 						<li>staging-mode enter/commit/discard;</li>
-						<li>signals, explicitly separated from persisted/replayed ops;</li>
-						<li>summary nack, retry, and timeout outcomes;</li>
+						<li>signals and their ordering relative to ops;</li>
+						<li>quorum proposal/accept/reject and a derived minimum sequence number;</li>
 						<li>alias success/conflict/already-aliased transitions;</li>
-						<li>saved-op replay versus stashed-op application as explicit events;</li>
 						<li>blob upload/attach pending states;</li>
 						<li>driver error category and retry metadata;</li>
-						<li>rendering the IR as Mermaid sequence/state diagrams.</li>
+						<li>rendering the trace as a Mermaid sequence diagram.</li>
 					</ul>
 				</section>
 
@@ -960,18 +1523,19 @@ clients: Client 'alice' is declared more than once.</code></pre>
 					<ul>
 						<li>map logical clients to real containers and entry points;</li>
 						<li>map opaque DataStore operations to a minimal test DataStore op source;</li>
-						<li>pause/resume/process inbound and outbound queues;</li>
-						<li>run synchronization barriers;</li>
-						<li>invoke summarizer helpers and observe summary ops/acks;</li>
+						<li>pause/resume/process inbound and outbound queues to realize the declared trace;</li>
+						<li>drive one client's cursor at a time to reproduce declared processing lag;</li>
+						<li>bind symbolic positions to observed <code>sequenceNumber</code> values and check the declared metadata against the observed message;</li>
+						<li>invoke summarizer helpers and observe summary ops and acks in the op stream;</li>
 						<li>wrap storage interfaces to count snapshot fetches;</li>
 						<li>capture and reload pending/full state artifacts;</li>
 						<li>evaluate expectation records and produce domain-level failures.</li>
 					</ul>
 
 					<div class="callout success">
-						The semantic model is already executor-ready: commands and expectations are
-						serializable discriminated unions, client IDs are stable, and artifacts have explicit
-						provenance.
+						The semantic model is already executor-ready: commands, trace entries, and
+						expectations are serializable discriminated unions, client IDs are stable, sequence
+						positions are stable symbols, and artifacts have explicit provenance.
 					</div>
 				</section>
 
@@ -1041,6 +1605,61 @@ clients: Client 'alice' is declared more than once.</code></pre>
 					</details>
 				</section>
 
+				<section id="limitations">
+					<h2>Explicit limitations</h2>
+					<p>
+						These are boundaries of the current design, stated so that nobody mistakes silence
+						for capability.
+					</p>
+					<ul>
+						<li>
+							<strong>No quorum consensus.</strong> Membership is modeled through
+							<code>join</code> and <code>leave</code>, but proposals, accepts, and rejects are
+							not. The validator never computes a minimum sequence number for the scenario; it
+							rejects a declared one that regresses, overtakes its submitter, or passes the
+							least reference position among live write clients.
+						</li>
+						<li>
+							<strong>Bunching uses the DataStore boundary only.</strong> The Container Runtime
+							also splits a bunch when the inner op type changes, and op types below the
+							DataStore boundary stay opaque here.
+						</li>
+						<li>
+							<strong>No signals.</strong> Signals are not persisted, not replayed, and not
+							ordered with respect to ops, so they need their own concept rather than a trace
+							entry. They are not modeled.
+						</li>
+						<li>
+							<strong>Declarative observations remain.</strong> Snapshot fetch counts, summary
+							tree/handle reuse, DataStore realization, and summary stage cannot be derived from
+							the trace. They stay as recorded expectations for a future executor to check.
+						</li>
+						<li>
+							<strong>Replay-order expectations name batches.</strong> Loose pending operations
+							are reported rather than silently dropped; wrap them in one-operation batches when
+							the scenario needs to assert replay order.
+						</li>
+						<li>
+							<strong>Delayed delta connection is coarse.</strong>
+							<code>deltaConnection: "delayed"</code> is represented as disconnected from the
+							live stream; storage-based catch-up before <code>connect()</code> is not a separate
+							delivery source yet.
+						</li>
+						<li>
+							<strong>Read-mode connections are declarative.</strong> The validator does not
+							block sequencing purely because a scenario requested a read connection; a scenario
+							states that transition explicitly with <code>connect()</code>.
+						</li>
+						<li>
+							<strong>No GC, aliasing, blob attach, or staging mode.</strong>
+						</li>
+						<li>
+							<strong>No executor.</strong> Nothing runs the IR against
+							<code>ITestObjectProvider</code> yet.
+						</li>
+					</ul>
+				</section>
+
 				<section id="glossary">
 					<h2>Glossary</h2>
 					<dl>
@@ -1062,6 +1681,37 @@ clients: Client 'alice' is declared more than once.</code></pre>
 						<dd>
 							Container Runtime transformations that group, compress, and chunk logical runtime
 							operations for transport, then reverse those transforms inbound.
+						</dd>
+						<dt><strong>Sequenced trace</strong></dt>
+						<dd>
+							The totally ordered list of sequenced messages a scenario declares. Its indices
+							are the sequence numbers; its entries are named so that other parts of the
+							scenario can refer to positions without writing integers.
+						</dd>
+						<dt><strong>Sequence position</strong></dt>
+						<dd>
+							A symbolic name for one entry in the total order, or one of the reserved names
+							<code>baseline</code> and <code>latest</code>.
+						</dd>
+						<dt><strong>Processing cursor</strong></dt>
+						<dd>
+							How far one client has advanced through the total order. Two clients with
+							different cursors are the DSL's model of processing lag.
+						</dd>
+						<dt><strong>Wire message</strong></dt>
+						<dd>
+							One entry in the total order. A grouped batch is one wire message carrying many
+							logical operations; a chunked payload is many wire messages carrying one.
+						</dd>
+						<dt><strong>Batch identity</strong></dt>
+						<dd>
+							The value a peer uses to reject a repeated batch: an explicit
+							<code>batchId</code>, or the derived <code>clientId_[batchStartCsn]</code>.
+						</dd>
+						<dt><strong>Optimistic local application</strong></dt>
+						<dd>
+							A submitted operation takes effect at its submitter before the service orders it.
+							Processing its own sequenced copy is an acknowledgement, not a second application.
 						</dd>
 						<dt><strong>Data virtualization</strong></dt>
 						<dd>

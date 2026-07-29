@@ -3,19 +3,42 @@
  * Licensed under the MIT License.
  */
 
-export const fluidScenarioFormatVersion = 1 as const;
+/**
+ * Version 2 introduces the sequenced trace: submission, sequencing, and per-client
+ * processing became three separate concepts instead of one implicit statement order.
+ */
+export const fluidScenarioFormatVersion = 2 as const;
 
 export type ClientRole = "interactive" | "summarizer";
 export type FlushMode = "turnBased" | "immediate";
 export type ProcessingQueue = "inbound" | "outbound";
 export type AttachState = "detached" | "attaching" | "attached";
-export type ConnectionState =
-	| "disconnected"
-	| "establishingConnection"
-	| "catchingUp"
-	| "connected";
+/**
+ * A client is `catchingUp` from the moment it obtains a connection until it has processed its
+ * own join message. Scenarios that never declare `join` entries move straight to `connected`.
+ */
+export type ConnectionState = "disconnected" | "catchingUp" | "connected";
 export type ConnectionEnvironment = "none" | "service" | "frozen";
 export type DirtyState = "dirty" | "saved";
+
+/**
+ * Why a container is no longer usable. `forkedContainer` is what a container reports when it
+ * sees its own pending batch arrive under a different client identity: the same logical work
+ * exists twice, so it closes rather than apply it a second time.
+ */
+export type ContainerOutcome = "closed" | "forkedContainer";
+
+/**
+ * A logical operation's status relative to one client.
+ *
+ * These states are mutually exclusive:
+ *
+ * - `pending`: this client has an outstanding local submission.
+ * - `sequenced`: it occupies a position in the total order that this client has not reached.
+ * - `processed`: this client has advanced through another client's sequenced operation.
+ * - `acked`: this client has advanced through its own sequenced operation.
+ * - `notProcessed`: it is neither pending here nor present in the sequenced trace.
+ */
 export type OperationDeliveryState =
 	| "pending"
 	| "sequenced"
@@ -34,8 +57,10 @@ export type ScenarioCoverage =
 	| "container-load"
 	| "driver-contracts"
 	| "op-stream"
+	| "op-ordering"
 	| "op-virtualization"
 	| "pending-state"
+	| "replay"
 	| "snapshot"
 	| "summarization"
 	| "data-virtualization";
@@ -72,9 +97,19 @@ export interface RuntimeConfiguration {
 	readonly enableGroupedBatching?: boolean;
 	readonly compression?: CompressionConfiguration;
 	readonly chunkSizeInBytes?: number;
-	readonly enableBatchIdTracking?: boolean;
+	/**
+	 * Mirrors the `Fluid.ContainerRuntime.DisableBatchIdTracking` feature gate. Tracking is
+	 * otherwise derived from turn-based flushing and grouped batching, as it is in the runtime.
+	 */
+	readonly disableBatchIdTracking?: boolean;
+	/**
+	 * Mirrors the `Fluid.Container.enableOfflineFull` feature gate.
+	 */
 	readonly enableOfflineFull?: boolean;
-	readonly enableDataVirtualization?: boolean;
+	/**
+	 * Mirrors the `Fluid.Container.UseLoadingGroupIdForSnapshotFetch2` feature gate.
+	 */
+	readonly useLoadingGroupIdForSnapshotFetch?: boolean;
 }
 
 export interface DocumentDefinition {
@@ -100,6 +135,135 @@ export interface BatchDefinition {
 	readonly reentrant?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Sequenced trace
+// ---------------------------------------------------------------------------
+
+/**
+ * A symbolic position in the total order.
+ *
+ * A scenario never writes raw sequence numbers. It names the sequenced entries it cares
+ * about and refers to those names. Two names are reserved: {@link baselineSequenceRef}
+ * denotes the position before the first sequenced entry, and {@link latestSequenceRef}
+ * denotes the newest sequenced entry at the point the reference is evaluated.
+ */
+export type SequenceRef = string;
+
+export const baselineSequenceRef = "baseline";
+export const latestSequenceRef = "latest";
+export const reservedSequenceRefs: readonly SequenceRef[] = [
+	baselineSequenceRef,
+	latestSequenceRef,
+];
+
+/**
+ * Where a wire message sits inside a logical batch, mirroring the `batch: true|false`
+ * metadata that marks the first and last message of a multi-message batch.
+ */
+export type BatchPosition = "single" | "start" | "continuation" | "end";
+
+/**
+ * The relationship between a logical operation and the wire message that carries it.
+ *
+ * `grouped` means the whole batch travels as one sequenced message. `chunk` means one
+ * payload was split across `count` sequenced messages, and only the message whose
+ * `index` equals `count` reconstructs the payload.
+ */
+export interface WireVirtualization {
+	readonly grouped?: boolean;
+	readonly compressed?: boolean;
+	readonly chunk?: {
+		readonly index: number;
+		readonly count: number;
+	};
+}
+
+interface TraceEntryBase {
+	/**
+	 * Unique symbolic name of this position in the total order.
+	 */
+	readonly at: string;
+	/**
+	 * Per-connection submission ordinal. Omit unless the scenario asserts something about it.
+	 */
+	readonly clientSequence?: number;
+	/**
+	 * The submitter's processing position when it produced this message. Defaults to the
+	 * submitter's cursor at submission time.
+	 */
+	readonly referenceSequence?: SequenceRef;
+	/**
+	 * The collaboration-window floor carried by this message.
+	 */
+	readonly minimumSequence?: SequenceRef;
+}
+
+export interface OperationsTraceEntry extends TraceEntryBase {
+	readonly kind: "operations";
+	readonly client: string;
+	/**
+	 * Logical operations reconstructed from this wire message. A non-final chunk carries none.
+	 */
+	readonly operations: readonly string[];
+	readonly batch?: string;
+	/**
+	 * Explicit wire batch identity. Absent means the runtime would derive one from the
+	 * submitting client and the batch's first client sequence number.
+	 */
+	readonly batchId?: string;
+	readonly batchPosition?: BatchPosition;
+	readonly virtualization?: WireVirtualization;
+	/**
+	 * Names an earlier entry whose batch identity this entry repeats. Duplicate entries are
+	 * detected and discarded, so they apply no logical operation.
+	 */
+	readonly duplicateOf?: string;
+}
+
+export interface ProtocolTraceEntry extends TraceEntryBase {
+	/**
+	 * `join` marks the point where a connecting client becomes a live member: it has processed
+	 * everything ordered before that position, and only from there can its own submissions be
+	 * sequenced. `leave` retires a disconnected client from the live set, which is what lets the
+	 * collaboration window advance past its reference position. `noop` moves a live client's
+	 * reference position forward without carrying an operation.
+	 */
+	readonly kind: "join" | "leave" | "noop";
+	/**
+	 * Absent for a service-generated message.
+	 */
+	readonly client?: string;
+}
+
+export interface SummarizeTraceEntry extends TraceEntryBase {
+	readonly kind: "summarize";
+	readonly client: string;
+	readonly summary: string;
+}
+
+export interface SummaryAckTraceEntry extends TraceEntryBase {
+	readonly kind: "summaryAck";
+	readonly summary: string;
+	readonly snapshot: string;
+}
+
+export interface SummaryNackTraceEntry extends TraceEntryBase {
+	readonly kind: "summaryNack";
+	readonly summary: string;
+	readonly retryAfterSeconds?: number;
+}
+
+export type TraceEntry =
+	| OperationsTraceEntry
+	| ProtocolTraceEntry
+	| SummarizeTraceEntry
+	| SummaryAckTraceEntry
+	| SummaryNackTraceEntry;
+
+// ---------------------------------------------------------------------------
+// Load
+// ---------------------------------------------------------------------------
+
 export interface ServiceLoadSource {
 	readonly kind: "service";
 	readonly snapshot?: string;
@@ -124,13 +288,17 @@ export type LoadSource =
 
 export interface LoadOptions {
 	readonly from: LoadSource;
-	readonly deltaConnection?: "default" | "none";
+	readonly deltaConnection?: "none" | "delayed";
 	readonly requestedConnectionMode?: "read" | "write";
-	readonly pauseAt?: {
-		readonly kind: "summaryReferenceSequence";
-		readonly summary: string;
-	};
+	/**
+	 * Pins the container's processing cursor. Delivery past this position is rejected.
+	 */
+	readonly pauseAt?: SequenceRef;
 }
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
 
 export interface CreateDetachedCommand {
 	readonly kind: "createDetached";
@@ -197,6 +365,10 @@ export interface RealizeDataStoreCommand {
 	readonly dataStore: string;
 }
 
+/**
+ * Offers a logical operation to the runtime. Submission does not place it in the total
+ * order; only a matching {@link SequenceCommand} does.
+ */
 export interface SubmitOperationCommand {
 	readonly kind: "submitOperation";
 	readonly client: string;
@@ -209,6 +381,61 @@ export interface SubmitBatchCommand {
 	readonly batch: BatchDefinition;
 }
 
+/**
+ * Re-offers an already declared logical batch, typically after reconnect or after a
+ * rehydrated container replays its pending state under a new client identity.
+ */
+export interface ResubmitBatchCommand {
+	readonly kind: "resubmitBatch";
+	readonly client: string;
+	readonly batch: string;
+	/**
+	 * Wire batch identity carried by the replay. Preserving the original identity is what
+	 * lets a peer discard a second copy.
+	 */
+	readonly batchId?: string;
+}
+
+export type SubmissionCommand =
+	| SubmitOperationCommand
+	| SubmitBatchCommand
+	| ResubmitBatchCommand;
+
+/**
+ * Submissions with no relative order. The trace, not the enclosing statement order,
+ * decides which one the sequencer accepted first.
+ */
+export interface ConcurrentSubmissionsCommand {
+	readonly kind: "concurrently";
+	readonly submissions: readonly SubmissionCommand[];
+}
+
+/**
+ * Appends one entry to the totally ordered stream of sequenced messages.
+ */
+export interface SequenceCommand {
+	readonly kind: "sequence";
+	readonly entry: TraceEntry;
+}
+
+/**
+ * Advances one client's processing cursor to a position in the total order.
+ */
+export interface DeliverCommand {
+	readonly kind: "deliver";
+	readonly client: string;
+	readonly through: SequenceRef;
+}
+
+/**
+ * Advances the listed clients to the newest sequenced position. An empty list means every
+ * open, connected, unpinned client.
+ */
+export interface SynchronizeCommand {
+	readonly kind: "synchronize";
+	readonly clients: readonly string[];
+}
+
 export interface PauseProcessingCommand {
 	readonly kind: "pauseProcessing";
 	readonly client: string;
@@ -219,11 +446,6 @@ export interface ResumeProcessingCommand {
 	readonly kind: "resumeProcessing";
 	readonly client: string;
 	readonly queue: ProcessingQueue;
-}
-
-export interface SynchronizeCommand {
-	readonly kind: "synchronize";
-	readonly clients: readonly string[];
 }
 
 export interface CapturePendingStateCommand {
@@ -243,24 +465,16 @@ export interface RequestLatestSnapshotRefreshCommand {
 	readonly snapshot?: string;
 }
 
+/**
+ * Generates and uploads a summary and submits the summary op. The op only enters the total
+ * order when a matching `summarize` trace entry is declared.
+ */
 export interface SummarizeCommand {
 	readonly kind: "summarize";
 	readonly client: string;
 	readonly summary: string;
 	readonly fullTree?: boolean;
 	readonly trackState?: boolean;
-}
-
-export interface AcknowledgeSummaryCommand {
-	readonly kind: "acknowledgeSummary";
-	readonly summary: string;
-	readonly snapshot: string;
-}
-
-export interface NackSummaryCommand {
-	readonly kind: "nackSummary";
-	readonly summary: string;
-	readonly retryAfterSeconds?: number;
 }
 
 export type ScenarioCommand =
@@ -278,15 +492,21 @@ export type ScenarioCommand =
 	| RealizeDataStoreCommand
 	| SubmitOperationCommand
 	| SubmitBatchCommand
+	| ResubmitBatchCommand
+	| ConcurrentSubmissionsCommand
+	| SequenceCommand
+	| DeliverCommand
+	| SynchronizeCommand
 	| PauseProcessingCommand
 	| ResumeProcessingCommand
-	| SynchronizeCommand
 	| CapturePendingStateCommand
 	| CaptureFullContainerStateCommand
 	| RequestLatestSnapshotRefreshCommand
-	| SummarizeCommand
-	| AcknowledgeSummaryCommand
-	| NackSummaryCommand;
+	| SummarizeCommand;
+
+// ---------------------------------------------------------------------------
+// Expectations
+// ---------------------------------------------------------------------------
 
 export interface ClientStateExpectation {
 	readonly kind: "clientState";
@@ -299,6 +519,7 @@ export interface ClientStateExpectation {
 		readonly environment?: ConnectionEnvironment;
 		readonly dirty?: DirtyState;
 		readonly closed?: boolean;
+		readonly outcome?: ContainerOutcome;
 		readonly inbound?: "running" | "paused";
 		readonly outbound?: "running" | "paused";
 	};
@@ -311,6 +532,16 @@ export interface OperationExpectation {
 	readonly state: OperationDeliveryState;
 }
 
+/**
+ * How many times a client applied a logical operation. Replay scenarios assert `1`.
+ */
+export interface LogicalApplicationExpectation {
+	readonly kind: "logicalApplication";
+	readonly operation: string;
+	readonly client: string;
+	readonly times: number;
+}
+
 export interface BatchVirtualizationExpectation {
 	readonly kind: "batchVirtualization";
 	readonly batch: string;
@@ -318,10 +549,21 @@ export interface BatchVirtualizationExpectation {
 	readonly compressed: boolean;
 	readonly chunked: boolean;
 	readonly originalOperationCount?: number;
+	/**
+	 * Number of sequenced messages the batch occupied. Grouping drives this down to one;
+	 * chunking drives it up.
+	 */
+	readonly wireMessages?: number;
 }
 
+/**
+ * The batches one client still has outstanding, in the order its runtime will replay them.
+ * `rebasedBatches` records intent that the trace cannot show, because rebasing happens before
+ * anything reaches the total order.
+ */
 export interface PendingReplayExpectation {
 	readonly kind: "pendingReplay";
+	readonly client: string;
 	readonly batches: readonly string[];
 	readonly rebasedBatches?: readonly string[];
 }
@@ -361,29 +603,120 @@ export interface SnapshotFetchExpectation {
 	readonly snapshot?: string;
 }
 
-export interface SequencePositionExpectation {
-	readonly kind: "sequencePosition";
+export interface SequenceRelation {
+	readonly relation: "equal" | "after" | "atLeast";
+	readonly position: SequenceRef;
+}
+
+/**
+ * Where a client sits in the total order: where it started, and how far it has processed.
+ */
+export interface DeliveryExpectation {
+	readonly kind: "delivery";
 	readonly client: string;
-	readonly initial?: {
-		readonly relation: "equal" | "after";
-		readonly summary: string;
-	};
-	readonly last?: {
-		readonly relation: "equal" | "after";
-		readonly summary: string;
-	};
+	readonly loadedAt?: SequenceRelation;
+	readonly processedThrough?: SequenceRelation;
+}
+
+/**
+ * Asserts that one sequenced position strictly precedes another. This is how a scenario
+ * states an intentional interleaving without relying on statement order.
+ */
+export interface SequenceOrderExpectation {
+	readonly kind: "sequenceOrder";
+	readonly before: SequenceRef;
+	readonly after: SequenceRef;
+}
+
+/**
+ * Every listed client processed the same positions and applied the same logical operations.
+ */
+export interface ConvergenceExpectation {
+	readonly kind: "convergence";
+	readonly clients: readonly string[];
+}
+
+/**
+ * Checkable properties of the declared trace.
+ *
+ * `denseTotalOrder`: positions are unique and every declared reference resolves.
+ *
+ * `clientSequenceMonotonic`: explicit client sequence numbers increase within a connection.
+ *
+ * `batchContiguity`: a batch's wire messages are contiguous, from one client, at one reference
+ * sequence number, with well-formed batch begin/end markers.
+ *
+ * `causalReferenceSequence`: a message's reference sequence number is a position its submitter
+ * had already processed, and precedes the message's own position.
+ *
+ * `minimumSequenceMonotonic`: the collaboration-window floor never moves backwards and never
+ * passes a live submitter's reference sequence number. When the scenario declares protocol
+ * joins and leaves, it also never passes the least reference position among live clients.
+ *
+ * `wireReconstruction`: chunked payloads are either fully reconstructed or abandoned by a
+ * submitter that lost its connection.
+ *
+ * `exactlyOnceApplication`: no client applies the same logical operation twice, even when the
+ * same logical batch is sequenced twice.
+ *
+ * `orderedDelivery`: cursors only move forward, and never past a pinned position.
+ */
+export type TraceInvariant =
+	| "denseTotalOrder"
+	| "clientSequenceMonotonic"
+	| "batchContiguity"
+	| "causalReferenceSequence"
+	| "minimumSequenceMonotonic"
+	| "wireReconstruction"
+	| "exactlyOnceApplication"
+	| "orderedDelivery";
+
+export const allTraceInvariants: readonly TraceInvariant[] = [
+	"denseTotalOrder",
+	"clientSequenceMonotonic",
+	"batchContiguity",
+	"causalReferenceSequence",
+	"minimumSequenceMonotonic",
+	"wireReconstruction",
+	"exactlyOnceApplication",
+	"orderedDelivery",
+];
+
+export interface TraceInvariantExpectation {
+	readonly kind: "traceInvariants";
+	readonly invariants: readonly TraceInvariant[];
+}
+
+/**
+ * How the Container Runtime splits one sequenced message's operations before dispatch: a new
+ * bunch begins whenever the target DataStore changes.
+ */
+export interface OperationBunch {
+	readonly dataStore: string;
+	readonly operations: readonly string[];
+}
+
+export interface OperationBunchExpectation {
+	readonly kind: "operationBunches";
+	readonly at: SequenceRef;
+	readonly bunches: readonly OperationBunch[];
 }
 
 export type ScenarioExpectation =
 	| ClientStateExpectation
 	| OperationExpectation
+	| LogicalApplicationExpectation
 	| BatchVirtualizationExpectation
+	| OperationBunchExpectation
 	| PendingReplayExpectation
 	| PendingStateExpectation
 	| SummaryExpectation
 	| DataStoreExpectation
 	| SnapshotFetchExpectation
-	| SequencePositionExpectation;
+	| DeliveryExpectation
+	| SequenceOrderExpectation
+	| ConvergenceExpectation
+	| TraceInvariantExpectation;
 
 export type ScenarioStep =
 	| {
