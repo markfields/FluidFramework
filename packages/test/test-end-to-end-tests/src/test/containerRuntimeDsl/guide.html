@@ -314,11 +314,11 @@
 					<li><a href="#trace">The sequenced trace</a></li>
 					<li><a href="#grammar">Language grammar</a></li>
 					<li><a href="#semantic-model">Semantic model</a></li>
-					<li><a href="#validator">Validator and invariants</a></li>
+					<li><a href="#validator">Validator and invariant ownership</a></li>
 					<li><a href="#example">Worked example</a></li>
 					<li><a href="#scenarios">Ten e2e restatements</a></li>
-					<li><a href="#extending">Extending the language</a></li>
-					<li><a href="#executor">Future executor</a></li>
+					<li><a href="#extending">Contributor workflow</a></li>
+					<li><a href="#executor">Evolution and backlog</a></li>
 					<li><a href="#sources">Source map</a></li>
 					<li><a href="#limitations">Limitations</a></li>
 					<li><a href="#glossary">Glossary</a></li>
@@ -339,7 +339,7 @@
 						</div>
 						<div class="card">
 							<strong>Validation</strong>
-							Domain-level identifier, lifecycle, provenance, and trace-invariant checks.
+							A proof-of-concept validator currently combines structural and semantic checks.
 						</div>
 						<div class="card">
 							<strong>Proof</strong>
@@ -352,6 +352,13 @@
 						what a collaboration scenario means and validates whether that description is
 						representable and internally consistent. It does not yet execute the scenario
 						against <code>ITestObjectProvider</code>.
+					</p>
+
+					<p>
+						This guide is the conceptual introduction. The adjacent
+						<a href="./DEV.md"><code>DEV.md</code></a> is the authoritative maintainer
+						specification for validation ownership, test conversion, language-extension gates,
+						and the aspirational backlog.
 					</p>
 
 					<div class="callout warning">
@@ -1131,7 +1138,7 @@ alice.connect();</code></pre>
 					</p>
 					<ul>
 						<li><strong>command</strong> — an action or control stimulus;</li>
-						<li><strong>expectation</strong> — an observation the future executor must check;</li>
+						<li><strong>expectation</strong> — a desired observation; the current proof-of-concept derives some, while the executor will be authoritative;</li>
 						<li><strong>note</strong> — explanatory intent retained with the scenario.</li>
 					</ul>
 					<pre><code>{
@@ -1161,13 +1168,23 @@ alice.connect();</code></pre>
 				</section>
 
 				<section id="validator">
-					<h2>Deterministic domain validator</h2>
+					<h2>Current validator and target ownership</h2>
 					<p>
-						The validator is a <strong>trace checker</strong>, not a simulator. It never chooses
-						an order. It replays the declared timeline, maintaining for each client a base
-						position, a processing cursor, an outstanding submission list, and an applied-operation
-						multiset, and then rejects declarations that violate the Fluid sequencing contract.
+						The current <code>validator.ts</code> is a proof-of-concept combination of three
+						responsibilities: structural scenario validation, trace checking, and semantic
+						derivation. It never chooses an order, but it does replay the declared timeline and
+						predict client and operation state. That made the domain precise before a real
+						executor existed; it is not the intended permanent architecture.
 					</p>
+
+					<div class="callout warning">
+						<strong>Target responsibility split:</strong> fluent TypeScript types constrain the
+						grammar; a scenario compiler checks IR integrity and produces an unambiguous execution
+						plan; the real Fluid executor is authoritative for Loader and Runtime behavior; and
+						an optional independent reference model predicts only selected stable contracts.
+						See <a href="./DEV.md#compiler-executor-renderer-and-reference-model">DEV.md</a>
+						for the maintainer specification.
+					</div>
 
 					<h3>Structural and lifecycle checks</h3>
 					<ul>
@@ -1192,7 +1209,7 @@ alice.connect();</code></pre>
 						<li>a cursor only moves forward, never past a pinned position, never into a paused inbound queue, never on a disconnected or frozen container.</li>
 					</ul>
 
-					<h3>Trace invariants</h3>
+					<h3>Trace invariants currently checked</h3>
 					<table>
 						<thead>
 							<tr>
@@ -1239,6 +1256,24 @@ alice.connect();</code></pre>
 						</tbody>
 					</table>
 
+					<h3>Where invariants should ultimately live</h3>
+					<p>
+						An invariant may intentionally be checked at two boundaries because the declaration
+						and the running implementation are different subjects. Dense order in the declared
+						trace is structural: symbolic positions must be unique and the trace array is dense
+						by construction. Dense sequence numbers emitted by Fluid are an executor
+						conformance check. Likewise, explicitly authored client sequence numbers can be
+						checked for monotonicity by the scenario compiler, while runtime assignment and
+						reconnect resets must be observed by the executor.
+					</p>
+					<p>
+						Implementation-sensitive predictions such as collaboration-window behavior or
+						exactly-once outcomes belong to the executor and, only when independent prediction
+						earns its maintenance cost, the optional reference model. The complete
+						invariant-ownership table is maintained in
+						<a href="./DEV.md#checked-invariants">DEV.md</a>.
+					</p>
+
 					<h3>Every invariant name is backed by a real check</h3>
 					<p>
 						<code>expectTrace().toSatisfy([...])</code> is a checkpoint, not a comment. Some
@@ -1251,12 +1286,13 @@ alice.connect();</code></pre>
 
 					<h3>Derived expectations</h3>
 					<p>
-						Expectations the validator can compute are computed and compared, not trusted.
-						Client state, operation states, application counts, delivery positions, batch
-						virtualization, dispatch bunches, saved/stashed op counts, summary state, DataStore
-						contents, and convergence all fall into this category. Only genuinely external
-						observations remain declarative: snapshot fetch counts, summary tree/handle reuse,
-						DataStore realization, and summary stage.
+						Today the validator computes client state, operation states, application counts,
+						delivery positions, batch virtualization, dispatch bunches, saved/stashed op counts,
+						summary state, DataStore contents, and convergence. During the planned split, pure
+						IR checks remain in the scenario compiler, actual Fluid behavior moves to the
+						executor, and only selected high-value independent predictions move to the optional
+						reference model. Snapshot fetch counts, summary tree/handle reuse, DataStore
+						realization, and summary stage already require executor observation.
 					</p>
 
 					<h3>Bunches</h3>
@@ -1474,52 +1510,49 @@ trace: 'peer' applied logical operation 'edit' 2 times.</code></pre>
 				</section>
 
 				<section id="extending">
-					<h2>Extending the language</h2>
-					<ol>
-						<li>
-							<strong>Start with the semantic model.</strong> Add a serializable command or
-							expectation to <code>model.ts</code>.
-						</li>
-						<li>
-							<strong>Add the narrowest fluent verb.</strong> Put it on the correct immutable
-							scope in <code>builder.ts</code>.
-						</li>
-						<li>
-							<strong>Add domain validation.</strong> Validate references, artifact provenance,
-							and known lifecycle guards in <code>validator.ts</code>.
-						</li>
-						<li>
-							<strong>Ground it in a real test.</strong> Add a source-traceable scenario and a
-							negative validator test.
-						</li>
-						<li><strong>Update this guide.</strong></li>
-					</ol>
+					<h2>Contributor workflow</h2>
+					<p>
+						Convert tests in two passes: first extract the behavior and distinguish it from
+						harness mechanics, then attempt to express it with existing vocabulary. When a gap
+						appears, prefer existing concepts, metadata on an existing event, or a new
+						expectation before adding another command or trace-entry kind.
+					</p>
+					<p>
+						Every extension needs production evidence, a precise observable meaning, an owning
+						layer, and tests at the component responsible for checking it. Structural IR
+						integrity belongs to the scenario compiler. Actual Fluid behavior belongs to the
+						executor. An independent reference-model prediction is optional and should exist
+						only when differential testing justifies its synchronization cost.
+					</p>
 
-					<h3>Candidate next surfaces</h3>
-					<ul>
-						<li>staging-mode enter/commit/discard;</li>
-						<li>signals and their ordering relative to ops;</li>
-						<li>quorum proposal/accept/reject and a derived minimum sequence number;</li>
-						<li>alias success/conflict/already-aliased transitions;</li>
-						<li>blob upload/attach pending states;</li>
-						<li>driver error category and retry metadata;</li>
-						<li>rendering the trace as a Mermaid sequence diagram.</li>
-					</ul>
+					<div class="callout success">
+						The complete conversion workflow, expressibility-gap table, extension gate, and
+						copy/paste <strong>How to convert an end-to-end test</strong> agent prompt live in
+						<a href="./DEV.md#converting-an-end-to-end-test">DEV.md</a>. They are maintained
+						there rather than duplicated in this onboarding guide.
+					</div>
 				</section>
 
 				<section id="executor">
-					<h2>Future executor architecture</h2>
+					<h2>Evolution architecture and backlog</h2>
 					<p>
-						A future runner should consume the IR through adapters rather than adding Fluid
-						objects to the semantic model.
+						The DSL scenario remains the source of truth. Its plain IR should be compiled once
+						into a normalized plan consumed by several independent components.
 					</p>
 					<div class="flow">
-						<span>FluidScenario IR</span><b>→</b><span>harness adapter</span><b>→</b>
-						<span>ITestObjectProvider</span><b>+</b><span>IOpProcessingController</span><b>+</b>
-						<span>summary helpers</span><b>→</b><span>observations</span>
+						<span>DSL types</span><b>→</b><span>IR</span><b>→</b>
+						<span>scenario compiler</span><b>→</b><span>execution plan</span><b>→</b>
+						<span>Fluid executor</span><b>+</b><span>TS renderer</span><b>+</b>
+						<span>optional reference model</span>
 					</div>
 
-					<h3>Likely adapter responsibilities</h3>
+					<h3>Runtime executor</h3>
+					<p>
+						The executor will drive real containers through <code>ITestObjectProvider</code>,
+						observe the actual sequenced stream and client state, and evaluate expectations
+						against Fluid. It will arrange test conditions and observe the ordering service; it
+						will not simulate or choose the service's result.
+					</p>
 					<ul>
 						<li>map logical clients to real containers and entry points;</li>
 						<li>map opaque DataStore operations to a minimal test DataStore op source;</li>
@@ -1532,11 +1565,41 @@ trace: 'peer' applied logical operation 'edit' 2 times.</code></pre>
 						<li>evaluate expectation records and produce domain-level failures.</li>
 					</ul>
 
-					<div class="callout success">
-						The semantic model is already executor-ready: commands, trace entries, and
-						expectations are serializable discriminated unions, client IDs are stable, sequence
-						positions are stable symbols, and artifacts have explicit provenance.
-					</div>
+					<h3>TypeScript reproduction renderer</h3>
+					<p>
+						The renderer will expand a failing plan into an explicit debuggable Mocha test with
+						DSL step annotations, symbolic sequence names, harness calls, and captured trace
+						state. Rendered files should normally be temporary files or CI artifacts rather than
+						a second checked-in source of truth.
+					</p>
+
+					<h3>Optional reference model</h3>
+					<p>
+						A reference model is a small, pure, independent predictor for selected stable
+						contracts. It does not drive Fluid or establish structural validity. It produces
+						predicted observations that can be compared with executor observations for
+						conformance and diagnosis, and it must not import the production algorithm it is
+						checking. Scenarios remain executable when no reference-model rule applies.
+					</p>
+
+					<h3>Aspirational backlog</h3>
+					<p>
+						None of the following target components is implemented yet:
+					</p>
+					<ul>
+						<li>split the current validator into a structural scenario compiler and selected reference-model logic;</li>
+						<li>replace raw string cross-references with typed operation, submission, and sequence-position handles;</li>
+						<li>model DataStore attachment and reference edges without exposing DDS payload mechanics;</li>
+						<li>build the real Fluid executor and diagnostic TypeScript renderer;</li>
+						<li>add differential model-versus-runtime conformance scenarios;</li>
+						<li>run automated CI drift detection with trace and reproduction artifacts;</li>
+						<li>maintain rule ownership and production-symbol evidence;</li>
+						<li>support explicit compatibility profiles for intentional contract transitions.</li>
+					</ul>
+					<p>
+						<a href="./DEV.md#aspirational">DEV.md</a> is the authoritative backlog with
+						milestones and boundaries for each item.
+					</p>
 				</section>
 
 				<section id="sources">
@@ -1646,15 +1709,21 @@ trace: 'peer' applied logical operation 'edit' 2 times.</code></pre>
 							delivery source yet.
 						</li>
 						<li>
-							<strong>Read-mode connections are declarative.</strong> The validator does not
-							block sequencing purely because a scenario requested a read connection; a scenario
-							states that transition explicitly with <code>connect()</code>.
+							<strong>Read-mode reconnect is coarse.</strong> A read connection cannot sequence
+							pending work, and <code>connect()</code> models transition to write mode. The DSL
+							does not yet express reconnecting explicitly in read mode.
 						</li>
 						<li>
 							<strong>No GC, aliasing, blob attach, or staging mode.</strong>
 						</li>
 						<li>
-							<strong>No executor.</strong> Nothing runs the IR against
+							<strong>No DataStore reference graph.</strong> Visibility and opaque operations can
+							describe some effects of storing a handle, but the source-to-target edge and
+							DataStore attach message are not first-class yet.
+						</li>
+						<li>
+							<strong>No scenario-compiler split, executor, or reference model.</strong> The
+							current validator still combines those concerns, and nothing runs the IR against
 							<code>ITestObjectProvider</code> yet.
 						</li>
 					</ul>
@@ -1671,6 +1740,21 @@ trace: 'peer' applied logical operation 'edit' 2 times.</code></pre>
 						<dd>
 							A builder interface that returns a narrower next interface, making invalid method
 							orderings fail to compile.
+						</dd>
+						<dt><strong>Scenario compiler</strong></dt>
+						<dd>
+							The planned structural checker that validates IR references and provenance, then
+							produces an unambiguous execution plan without predicting changing runtime logic.
+						</dd>
+						<dt><strong>Executor</strong></dt>
+						<dd>
+							The planned runner that drives real Fluid containers and treats their observed
+							behavior as authoritative.
+						</dd>
+						<dt><strong>Reference model</strong></dt>
+						<dd>
+							An optional pure implementation of selected stable contracts, used to compare
+							independent predictions with executor observations.
 						</dd>
 						<dt><strong>Artifact provenance</strong></dt>
 						<dd>

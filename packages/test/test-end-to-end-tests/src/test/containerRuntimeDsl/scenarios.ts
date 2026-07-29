@@ -599,8 +599,10 @@ export const incrementalDataStoreSummaries = fluidScenario(
 		s.client("main").createDataStore("secondary");
 		s.client("main").makeDataStoreVisible("secondary");
 
+		//* CPLT "reference-secondary" here doesn't indicate any actual reference added between those nodes. This seems lossy? Add to the backlog the idea of references between nodes (executor will implement by storing a handle to B in A's DDS)
 		s.client("main").submitOperation(op("reference-secondary", rootDataStore.id));
 		s.client("main").submitOperation(op("seed-secondary", "secondary"));
+		//* CPLT can we pass the ops by reference instead of merely describing? e.g. there's no type safety on the strings passed for "operations" array
 		s.sequence().operations("seq-reference-secondary", "main", ["reference-secondary"]);
 		s.sequence().operations("seq-seed-secondary", "main", ["seed-secondary"]);
 		s.service().synchronize();
