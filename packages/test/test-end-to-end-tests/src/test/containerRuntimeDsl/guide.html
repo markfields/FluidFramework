@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Fluid Container Runtime Collaboration DSL Guide</title>
+		<style>
+			:root {
+				color-scheme: light dark;
+				--bg: #f7f9fc;
+				--surface: #ffffff;
+				--surface-muted: #eef3f9;
+				--text: #172033;
+				--muted: #536178;
+				--border: #ccd7e5;
+				--accent: #0067c0;
+				--accent-soft: #dceeff;
+				--success: #137333;
+				--warning: #9a5b00;
+				--code-bg: #101827;
+				--code-text: #e7eefc;
+				--shadow: 0 8px 24px rgb(31 50 81 / 10%);
+			}
+
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--bg: #0e1420;
+					--surface: #151d2b;
+					--surface-muted: #202b3d;
+					--text: #eef4ff;
+					--muted: #b3bfd1;
+					--border: #35445c;
+					--accent: #68b5ff;
+					--accent-soft: #173858;
+					--success: #70d58b;
+					--warning: #ffc267;
+					--code-bg: #080d16;
+					--code-text: #e7eefc;
+					--shadow: 0 8px 24px rgb(0 0 0 / 28%);
+				}
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			html {
+				scroll-behavior: smooth;
+			}
+
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font-family:
+					Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+					sans-serif;
+				line-height: 1.6;
+			}
+
+			a {
+				color: var(--accent);
+			}
+
+			code,
+			pre {
+				font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+			}
+
+			code {
+				background: var(--surface-muted);
+				border-radius: 0.25rem;
+				padding: 0.1rem 0.3rem;
+			}
+
+			pre {
+				overflow-x: auto;
+				background: var(--code-bg);
+				color: var(--code-text);
+				border-radius: 0.65rem;
+				padding: 1rem 1.15rem;
+				line-height: 1.5;
+			}
+
+			pre code {
+				background: transparent;
+				padding: 0;
+			}
+
+			header {
+				background:
+					linear-gradient(135deg, rgb(0 103 192 / 96%), rgb(83 56 160 / 94%)),
+					var(--accent);
+				color: white;
+				padding: 3.5rem max(1.25rem, calc((100vw - 1180px) / 2));
+			}
+
+			header p {
+				max-width: 800px;
+				font-size: 1.12rem;
+			}
+
+			.layout {
+				display: grid;
+				grid-template-columns: minmax(220px, 280px) minmax(0, 880px);
+				gap: 2rem;
+				max-width: 1220px;
+				margin: 0 auto;
+				padding: 2rem 1.25rem 4rem;
+			}
+
+			nav {
+				position: sticky;
+				top: 1rem;
+				align-self: start;
+				max-height: calc(100vh - 2rem);
+				overflow-y: auto;
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: 0.75rem;
+				padding: 1rem;
+				box-shadow: var(--shadow);
+			}
+
+			nav strong {
+				display: block;
+				margin-bottom: 0.5rem;
+			}
+
+			nav ol {
+				margin: 0;
+				padding-left: 1.25rem;
+			}
+
+			nav li {
+				margin: 0.35rem 0;
+			}
+
+			main {
+				min-width: 0;
+			}
+
+			section {
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: 0.85rem;
+				padding: 1.5rem;
+				margin-bottom: 1.5rem;
+				box-shadow: var(--shadow);
+			}
+
+			h1,
+			h2,
+			h3,
+			h4 {
+				line-height: 1.25;
+			}
+
+			h1 {
+				font-size: clamp(2rem, 5vw, 3.4rem);
+				margin: 0 0 0.75rem;
+			}
+
+			h2 {
+				border-bottom: 1px solid var(--border);
+				padding-bottom: 0.45rem;
+				margin-top: 0;
+			}
+
+			h3 {
+				margin-top: 1.7rem;
+			}
+
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				margin: 1rem 0;
+			}
+
+			th,
+			td {
+				text-align: left;
+				vertical-align: top;
+				padding: 0.65rem;
+				border: 1px solid var(--border);
+			}
+
+			th {
+				background: var(--surface-muted);
+			}
+
+			.cards {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+				gap: 0.85rem;
+			}
+
+			.card {
+				background: var(--surface-muted);
+				border: 1px solid var(--border);
+				border-radius: 0.65rem;
+				padding: 1rem;
+			}
+
+			.card strong {
+				display: block;
+				margin-bottom: 0.35rem;
+			}
+
+			.callout {
+				border-left: 0.35rem solid var(--accent);
+				background: var(--accent-soft);
+				padding: 0.85rem 1rem;
+				margin: 1rem 0;
+			}
+
+			.callout.warning {
+				border-left-color: var(--warning);
+			}
+
+			.callout.success {
+				border-left-color: var(--success);
+			}
+
+			.flow {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: center;
+				gap: 0.5rem;
+				margin: 1rem 0;
+			}
+
+			.flow span {
+				background: var(--surface-muted);
+				border: 1px solid var(--border);
+				border-radius: 999px;
+				padding: 0.4rem 0.75rem;
+			}
+
+			.flow b {
+				color: var(--muted);
+			}
+
+			.pill {
+				display: inline-block;
+				border: 1px solid var(--border);
+				border-radius: 999px;
+				padding: 0.15rem 0.55rem;
+				margin: 0.15rem;
+				font-size: 0.88rem;
+				background: var(--surface-muted);
+			}
+
+			details {
+				border: 1px solid var(--border);
+				border-radius: 0.6rem;
+				padding: 0.7rem 0.9rem;
+				margin: 0.7rem 0;
+			}
+
+			summary {
+				cursor: pointer;
+				font-weight: 650;
+			}
+
+			.small {
+				color: var(--muted);
+				font-size: 0.92rem;
+			}
+
+			footer {
+				color: var(--muted);
+				text-align: center;
+				padding: 1rem 1rem 3rem;
+			}
+
+			@media (max-width: 900px) {
+				.layout {
+					grid-template-columns: 1fr;
+				}
+
+				nav {
+					position: static;
+					max-height: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>Fluid Container Runtime Collaboration DSL</h1>
+			<p>
+				A source-grounded, typed language for describing multi-client Fluid scenarios across
+				Loader, Container Runtime, operations, summaries, snapshots, loading groups, and
+				pending-state rehydration.
+			</p>
+			<p>
+				This guide assumes familiarity with Fluid Framework concepts. It does not assume prior
+				experience designing or using domain-specific languages.
+			</p>
+		</header>
+
+		<div class="layout">
+			<nav aria-label="Table of contents">
+				<strong>Contents</strong>
+				<ol>
+					<li><a href="#status">Status and purpose</a></li>
+					<li><a href="#dsl-primer">DSL primer</a></li>
+					<li><a href="#lineage">Fowler and Tickloom</a></li>
+					<li><a href="#scope">Scope and boundaries</a></li>
+					<li><a href="#architecture">Fluid architecture model</a></li>
+					<li><a href="#states">States and transitions</a></li>
+					<li><a href="#grammar">Language grammar</a></li>
+					<li><a href="#semantic-model">Semantic model</a></li>
+					<li><a href="#validator">Validator</a></li>
+					<li><a href="#example">Worked example</a></li>
+					<li><a href="#scenarios">Ten e2e restatements</a></li>
+					<li><a href="#extending">Extending the language</a></li>
+					<li><a href="#executor">Future executor</a></li>
+					<li><a href="#sources">Source map</a></li>
+					<li><a href="#glossary">Glossary</a></li>
+				</ol>
+			</nav>
+
+			<main>
+				<section id="status">
+					<h2>Status and purpose</h2>
+					<div class="cards">
+						<div class="card">
+							<strong>Artifact</strong>
+							Internal TypeScript DSL compiled by the normal TypeScript compiler.
+						</div>
+						<div class="card">
+							<strong>Output</strong>
+							A pure, JSON-serializable scenario intermediate representation.
+						</div>
+						<div class="card">
+							<strong>Validation</strong>
+							Domain-level identifier, lifecycle, provenance, and option checks.
+						</div>
+						<div class="card">
+							<strong>Proof</strong>
+							Ten existing end-to-end tests restated in the language.
+						</div>
+					</div>
+
+					<p>
+						The implementation is a <strong>descriptive proof of concept</strong>. It records
+						what a collaboration scenario means and validates whether that description is
+						representable. It does not yet execute the scenario against
+						<code>ITestObjectProvider</code>.
+					</p>
+
+					<div class="callout warning">
+						<strong>Important:</strong> the validator is not a fake ordering service or a fake
+						Container Runtime. Expected observations remain explicit in the scenario. The
+						validator checks that referenced clients, operations, summaries, snapshots, and
+						captured states exist and that commands obey known lifecycle guards.
+					</div>
+				</section>
+
+				<section id="dsl-primer">
+					<h2>DSL primer</h2>
+					<h3>What is a DSL?</h3>
+					<p>
+						A domain-specific language is a deliberately small language for one problem domain.
+						SQL describes queries. Mermaid describes diagrams. This DSL describes Fluid
+						collaboration scenarios.
+					</p>
+					<p>
+						A general TypeScript test can express almost anything. That flexibility creates
+						incidental choices: loaders, callbacks, event wiring, queue timing, test harness
+						helpers, and assertions can all be arranged in many ways. A DSL removes most of those
+						choices and leaves a constrained vocabulary:
+					</p>
+					<p>
+						<span class="pill">load</span>
+						<span class="pill">attach</span>
+						<span class="pill">disconnect</span>
+						<span class="pill">submit operation</span>
+						<span class="pill">synchronize</span>
+						<span class="pill">summarize</span>
+						<span class="pill">acknowledge summary</span>
+						<span class="pill">capture pending state</span>
+						<span class="pill">rehydrate</span>
+						<span class="pill">expect</span>
+					</p>
+
+					<h3>Why an internal DSL?</h3>
+					<p>
+						This is an <em>internal</em> DSL: TypeScript supplies the parser, module system,
+						editor support, and type checker. There is no custom lexer or text parser.
+						Progressive interfaces constrain which methods are legal at each point in the
+						builder.
+					</p>
+
+					<div class="flow">
+						<span>scenario name</span><b>→</b><span>source test</span><b>→</b>
+						<span>document</span><b>→</b><span>clients</span><b>→</b>
+						<span>coverage</span><b>→</b><span>steps</span>
+					</div>
+
+					<h3>Three layers</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Layer</th>
+								<th>Responsibility</th>
+								<th>File</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Fluent grammar</td>
+								<td>Readable authoring surface and compile-time ordering.</td>
+								<td><code>builder.ts</code></td>
+							</tr>
+							<tr>
+								<td>Semantic model</td>
+								<td>Pure commands, controls, expectations, and metadata.</td>
+								<td><code>model.ts</code></td>
+							</tr>
+							<tr>
+								<td>Domain validator</td>
+								<td>Deterministic errors phrased in Fluid concepts.</td>
+								<td><code>validator.ts</code></td>
+							</tr>
+						</tbody>
+					</table>
+				</section>
+
+				<section id="lineage">
+					<h2>Design lineage: Fowler and Tickloom</h2>
+					<p>
+						Martin Fowler's
+						<a href="https://martinfowler.com/articles/llm-and-dsls.html"
+							>LLMs and DSLs article</a
+						>
+						argues that a small language plus a deterministic validator narrows the space in
+						which an LLM can make mistakes. The durable artifact becomes the domain program, not
+						the prompt that generated it.
+					</p>
+					<p>
+						<a href="https://github.com/unmeshjoshi/tickloom">Tickloom</a> demonstrates this
+						with an internal Java DSL for distributed-system scenarios. Its strongest transferable
+						ideas are:
+					</p>
+					<ul>
+						<li>progressive interfaces for grammar;</li>
+						<li>a semantic model separate from fluent syntax;</li>
+						<li>domain-level validation and execution;</li>
+						<li>scenario artifacts that are readable enough to maintain directly.</li>
+					</ul>
+					<p>This Fluid design also corrects several Tickloom sharp edges:</p>
+					<ul>
+						<li>
+							Each client scope is immutable; selecting Bob cannot change an earlier Alice scope.
+						</li>
+						<li>
+							Commands are inspectable records, not anonymous execution lambdas.
+						</li>
+						<li>
+							Persistent effects use honest verbs such as <code>pause</code>,
+							<code>resume</code>, <code>disconnect</code>, and <code>connect</code>.
+						</li>
+						<li>
+							Identifiers and artifact provenance are validated before any future execution.
+						</li>
+					</ul>
+				</section>
+
+				<section id="scope">
+					<h2>Scope and abstraction boundaries</h2>
+					<h3>In scope</h3>
+					<ul>
+						<li>container creation, attach, load, connect, disconnect, close;</li>
+						<li>intermediate connection states and requested connection mode;</li>
+						<li>DataStore creation, visibility, lazy realization, and opaque operations;</li>
+						<li>outbound batching and op virtualization;</li>
+						<li>sequencing, pending state, replay, resubmission, and local acknowledgement;</li>
+						<li>summary generation, upload stage, broadcast, ack/nack, and handle reuse;</li>
+						<li>snapshot selection, refresh, and loading-group fetches;</li>
+						<li>ordinary pending-local-state capture and self-contained full-container capture;</li>
+						<li>frozen/offline writable load and later online resume.</li>
+					</ul>
+
+					<h3>Out of scope</h3>
+					<ul>
+						<li>DDS-specific operation semantics;</li>
+						<li>concrete driver implementations, endpoint names, token shapes, or cache internals;</li>
+						<li>a simulated ordering service or storage service;</li>
+						<li>automatic proof that an expectation is behaviorally true;</li>
+						<li>full GC, aliasing, staging mode, and signal APIs in the first prototype.</li>
+					</ul>
+
+					<div class="callout">
+						The DataStore/DDS boundary is intentional. A scenario may say that operation
+						<code>offline-3</code> targets DataStore <code>root</code>, but it does not say
+						whether that operation is a map set, counter increment, tree edit, or sequence
+						change.
+					</div>
+				</section>
+
+				<section id="architecture">
+					<h2>Fluid architecture represented by the language</h2>
+					<h3>Load pipeline</h3>
+					<div class="flow">
+						<span>resolve URL</span><b>→</b><span>create document service</span><b>→</b>
+						<span>connect storage</span><b>→</b><span>fetch snapshot/version</span><b>→</b>
+						<span>initialize protocol</span><b>→</b><span>instantiate runtime</span><b>→</b>
+						<span>replay saved/stashed ops</span><b>→</b><span>connect and catch up</span>
+					</div>
+
+					<h3>Outbound operation pipeline</h3>
+					<div class="flow">
+						<span>opaque DataStore op</span><b>→</b><span>ContainerRuntime submit</span><b>→</b>
+						<span>Outbox batch</span><b>→</b><span>group</span><b>→</b>
+						<span>compress</span><b>→</b><span>chunk</span><b>→</b>
+						<span>Loader submitBatch</span><b>→</b><span>ordering service</span>
+					</div>
+					<p>
+						Pending state stores the original unvirtualized runtime operations, including batch
+						information and local metadata. That is why replay expectations use logical batch and
+						operation identifiers rather than wire chunks.
+					</p>
+
+					<h3>Inbound operation pipeline</h3>
+					<div class="flow">
+						<span>sequenced message</span><b>→</b><span>unchunk</span><b>→</b>
+						<span>decompress</span><b>→</b><span>ungroup</span><b>→</b>
+						<span>pending-state reconciliation</span><b>→</b>
+						<span>ContainerRuntime dispatch</span><b>→</b>
+						<span>ChannelCollection</span><b>→</b><span>DataStore</span>
+					</div>
+
+					<h3>Summary pipeline</h3>
+					<div class="flow">
+						<span>base validation</span><b>→</b><span>generate tree</span><b>→</b>
+						<span>upload with context</span><b>→</b><span>submit summary op</span><b>→</b>
+						<span>broadcast</span><b>→</b><span>ack or nack</span><b>→</b>
+						<span>refresh tracked state/snapshot</span>
+					</div>
+				</section>
+
+				<section id="states">
+					<h2>States and transitions</h2>
+					<h3>Attach state</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>State</th>
+								<th>Meaning</th>
+								<th>Important transition</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>detached</code></td>
+								<td>No service document yet.</td>
+								<td><code>beginAttach</code> or successful atomic <code>attach</code>.</td>
+							</tr>
+							<tr>
+								<td><code>attaching</code></td>
+								<td>Create/attach is in progress.</td>
+								<td>May be serialized; later completion becomes attached.</td>
+							</tr>
+							<tr>
+								<td><code>attached</code></td>
+								<td>Backed by a service document or rehydrated attaching state.</td>
+								<td>May connect, submit runtime ops, summarize, and capture pending state.</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						Serialization provenance matters: rehydrating state serialized while detached
+						produces a detached container, while rehydrating state serialized while attaching
+						produces an attached container.
+					</p>
+
+					<h3>Connection state is not connection mode</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Axis</th>
+								<th>Values</th>
+								<th>Why separate?</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Connection state</td>
+								<td>Disconnected, EstablishingConnection, CatchingUp, Connected</td>
+								<td>Describes Loader connection/catch-up lifecycle.</td>
+							</tr>
+							<tr>
+								<td>Mode</td>
+								<td>read, write</td>
+								<td>A connected read client is not write-capable.</td>
+							</tr>
+							<tr>
+								<td>Read-only</td>
+								<td>true, false</td>
+								<td>Public/runtime read-only state is not identical to transport mode.</td>
+							</tr>
+							<tr>
+								<td>Environment</td>
+								<td>none, service, frozen</td>
+								<td>A writable frozen container can be logically connected without live driver wiring.</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<h3>Operation states</h3>
+					<p>
+						The prototype uses expectation vocabulary rather than attempting a full simulator:
+						<code>pending</code>, <code>sequenced</code>, <code>processed</code>,
+						<code>acked</code>, and <code>notProcessed</code>.
+					</p>
+
+					<h3>Summary states and stages</h3>
+					<p>
+						Stages describe an attempt:
+						<code>base → generate → upload → submit</code>. States describe its protocol
+						lifecycle: <code>local → broadcast → acked</code> or <code>nacked</code>.
+					</p>
+
+					<h3>Captured state artifacts</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Artifact</th>
+								<th>Produced by</th>
+								<th>Use</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>pendingLocalState</code></td>
+								<td><code>IContainer.getPendingLocalState()</code></td>
+								<td>Online resume with base snapshot, saved ops, and stashed runtime state.</td>
+							</tr>
+							<tr>
+								<td><code>fullContainerState</code></td>
+								<td><code>captureFullContainerState()</code></td>
+								<td>Self-contained frozen/offline load, including required attachment content.</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						These are not two modes of the same runtime method. They are separate current APIs
+						with different guarantees. Full-container capture does not currently support loading
+						groups.
+					</p>
+				</section>
+
+				<section id="grammar">
+					<h2>Language grammar</h2>
+					<h3>Top-level form</h3>
+					<pre><code>fluidScenario("scenario name")
+  .fromTest({
+    file: "packages/test/test-end-to-end-tests/src/test/example.spec.ts",
+    suite: "Suite name",
+    test: "Test name",
+  })
+  .document(document("logical-document", dataStores, runtimeOptions))
+  .clients(
+    interactiveClient("alice"),
+    summarizerClient("summarizer"),
+  )
+  .covers("op-stream", "summarization")
+  .steps((s) =&gt; {
+    // Scenario timeline
+  });</code></pre>
+
+					<h3>Scopes</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Scope</th>
+								<th>Examples</th>
+								<th>Semantic owner</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><code>s.client(id)</code></td>
+								<td>load, attach, submit, summarize, capture, realize, close</td>
+								<td>Container/ContainerRuntime instance</td>
+							</tr>
+							<tr>
+								<td><code>s.processing(id)</code></td>
+								<td>pause or resume inbound/outbound processing</td>
+								<td>Test-harness queue control</td>
+							</tr>
+							<tr>
+								<td><code>s.service()</code></td>
+								<td>synchronize, summary ack/nack, full-container capture</td>
+								<td>Abstract service/driver boundary</td>
+							</tr>
+							<tr>
+								<td><code>s.expect…</code></td>
+								<td>client, op, batch, summary, snapshot, sequence, DataStore</td>
+								<td>Observation recorded in the IR</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<h3>Immutable client scopes</h3>
+					<pre><code>const alice = s.client("alice");
+const bob = s.client("bob");
+
+alice.disconnect();
+bob.submitOperation({ id: "op-1", dataStore: "root" });
+alice.connect();</code></pre>
+					<p>
+						<code>alice</code> remains bound to Alice. Selecting Bob cannot mutate it. This
+						avoids the shared-current-client bug identified in Tickloom's current builder.
+					</p>
+				</section>
+
+				<section id="semantic-model">
+					<h2>Semantic model</h2>
+					<p>
+						Every fluent call appends a plain-data step. There are only three top-level step
+						kinds:
+					</p>
+					<ul>
+						<li><strong>command</strong> — an action or control stimulus;</li>
+						<li><strong>expectation</strong> — an observation the future executor must check;</li>
+						<li><strong>note</strong> — explanatory intent retained with the scenario.</li>
+					</ul>
+					<pre><code>{
+  "kind": "command",
+  "command": {
+    "kind": "submitBatch",
+    "client": "writer",
+    "batch": {
+      "id": "large-batch",
+      "operations": [
+        { "id": "large-op-0", "dataStore": "root", "sizeInBytes": 100 }
+      ]
+    }
+  }
+}</code></pre>
+					<p>
+						Because the IR contains no closures, loaders, containers, driver objects, or test
+						provider instances, it can be serialized, diffed, rendered, analyzed, or consumed by
+						a later executor.
+					</p>
+				</section>
+
+				<section id="validator">
+					<h2>Deterministic domain validator</h2>
+					<p>The validator currently checks:</p>
+					<ul>
+						<li>unique client, DataStore, operation, batch, summary, snapshot, and capture IDs;</li>
+						<li>all references point to previously declared or produced artifacts;</li>
+						<li>load, attach, connect, disconnect, close, submit, summarize, and capture guards;</li>
+						<li>serialized detached/attaching provenance;</li>
+						<li>frozen load requires <code>captureFullContainerState</code> output;</li>
+						<li>compression requires grouped batching;</li>
+						<li>chunking requires compression;</li>
+						<li>loading groups require data virtualization;</li>
+						<li>writable frozen flow requires turn-based flush, grouped batching, and batch IDs;</li>
+						<li>full-container capture and loading groups are currently incompatible.</li>
+					</ul>
+
+					<h3>Example error</h3>
+					<pre><code>steps[2]: Client 'alice' cannot submit runtime operations while detached.
+clients: Client 'alice' is declared more than once.</code></pre>
+					<p>
+						These errors are intentionally expressed in domain vocabulary rather than as a
+						null dereference or a test-harness stack trace.
+					</p>
+				</section>
+
+				<section id="example">
+					<h2>Worked example: disconnect gates inbound processing</h2>
+					<pre><code>export const disconnectGatesInboundOps = fluidScenario(
+  "disconnect gates inbound operation processing",
+)
+  .fromTest({
+    file: "packages/test/test-end-to-end-tests/src/test/container.spec.ts",
+    suite: "Container",
+    test: "can control op processing with connect() and disconnect()",
+  })
+  .document(document("collaboration", [{ id: "root", root: true }]))
+  .clients(interactiveClient("writer"), interactiveClient("reader"))
+  .covers("container-lifecycle", "op-stream")
+  .steps((s) =&gt; {
+    s.client("writer").load({ from: { kind: "service" } });
+    s.client("reader").load({ from: { kind: "service" } });
+
+    s.client("writer").submitOperation({
+      id: "initial-value",
+      dataStore: "root",
+    });
+    s.service().synchronize();
+    s.expectOperation("initial-value").at("reader").toBe("processed");
+
+    s.client("reader").disconnect();
+    s.client("writer").submitOperation({
+      id: "while-disconnected",
+      dataStore: "root",
+    });
+    s.service().synchronize("writer");
+    s.expectOperation("while-disconnected")
+      .at("reader")
+      .toBe("notProcessed");
+
+    s.client("reader").connect();
+    s.service().synchronize();
+    s.expectOperation("while-disconnected")
+      .at("reader")
+      .toBe("processed");
+  });</code></pre>
+
+					<h3>What disappeared from the original test?</h3>
+					<ul>
+						<li>runtime factory construction;</li>
+						<li>provider plumbing;</li>
+						<li>entry-point casts;</li>
+						<li>DDS event and timeout wiring;</li>
+						<li>DDS value details.</li>
+					</ul>
+					<p>
+						What remains is the architectural intent: two clients, a disconnection boundary, an
+						op submitted while disconnected, and catch-up after reconnect.
+					</p>
+				</section>
+
+				<section id="scenarios">
+					<h2>Ten end-to-end test restatements</h2>
+					<table>
+						<thead>
+							<tr>
+								<th>#</th>
+								<th>Scenario</th>
+								<th>Source test</th>
+								<th>Breadth</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>1</td>
+								<td>Disconnect gates inbound operation processing</td>
+								<td><code>container.spec.ts</code></td>
+								<td>connection lifecycle, op catch-up</td>
+							</tr>
+							<tr>
+								<td>2</td>
+								<td>Paused load at a summary sequence</td>
+								<td><code>loadModes.spec.ts</code></td>
+								<td>summary snapshot, point-in-time load</td>
+							</tr>
+							<tr>
+								<td>3</td>
+								<td>Grouping, compression, and chunking</td>
+								<td><code>compression.spec.ts</code></td>
+								<td>op virtualization</td>
+							</tr>
+							<tr>
+								<td>4</td>
+								<td>Reentrant pending-batch rebase</td>
+								<td><code>pendingBatchReentry.spec.ts</code></td>
+								<td>pending batches, ordering, replay</td>
+							</tr>
+							<tr>
+								<td>5</td>
+								<td>Stashed ops with no saved ops</td>
+								<td><code>offline/waitForSummary.spec.ts</code></td>
+								<td>summary baseline, stash, online resume</td>
+							</tr>
+							<tr>
+								<td>6</td>
+								<td>Writable frozen/offline round trip</td>
+								<td><code>offline/frozenOfflineRoundTrip.spec.ts</code></td>
+								<td>full capture, offline edits, replay</td>
+							</tr>
+							<tr>
+								<td>7</td>
+								<td>Older summarizer fetches latest snapshot</td>
+								<td><code>summarizationFetchValidation.spec.ts</code></td>
+								<td>summary ack, storage fetch contract</td>
+							</tr>
+							<tr>
+								<td>8</td>
+								<td>Detached serialize and rehydrate</td>
+								<td><code>deRehydrateContainerTests.spec.ts</code></td>
+								<td>detached lifecycle, local snapshot</td>
+							</tr>
+							<tr>
+								<td>9</td>
+								<td>Incremental DataStore summaries</td>
+								<td><code>summarizeIncrementally.spec.ts</code></td>
+								<td>tree versus handle reuse</td>
+							</tr>
+							<tr>
+								<td>10</td>
+								<td>Loading-group offline refresh</td>
+								<td><code>data-virtualization/groupIdOffline.spec.ts</code></td>
+								<td>lazy snapshot fetch, refresh, pending state</td>
+							</tr>
+						</tbody>
+					</table>
+					<p>
+						All definitions are in <code>scenarios.ts</code>, and each scenario carries its
+						source file, suite, test name, line range, and coverage tags.
+					</p>
+				</section>
+
+				<section id="extending">
+					<h2>Extending the language</h2>
+					<ol>
+						<li>
+							<strong>Start with the semantic model.</strong> Add a serializable command or
+							expectation to <code>model.ts</code>.
+						</li>
+						<li>
+							<strong>Add the narrowest fluent verb.</strong> Put it on the correct immutable
+							scope in <code>builder.ts</code>.
+						</li>
+						<li>
+							<strong>Add domain validation.</strong> Validate references, artifact provenance,
+							and known lifecycle guards in <code>validator.ts</code>.
+						</li>
+						<li>
+							<strong>Ground it in a real test.</strong> Add a source-traceable scenario and a
+							negative validator test.
+						</li>
+						<li><strong>Update this guide.</strong></li>
+					</ol>
+
+					<h3>Candidate next surfaces</h3>
+					<ul>
+						<li>staging-mode enter/commit/discard;</li>
+						<li>signals, explicitly separated from persisted/replayed ops;</li>
+						<li>summary nack, retry, and timeout outcomes;</li>
+						<li>alias success/conflict/already-aliased transitions;</li>
+						<li>saved-op replay versus stashed-op application as explicit events;</li>
+						<li>blob upload/attach pending states;</li>
+						<li>driver error category and retry metadata;</li>
+						<li>rendering the IR as Mermaid sequence/state diagrams.</li>
+					</ul>
+				</section>
+
+				<section id="executor">
+					<h2>Future executor architecture</h2>
+					<p>
+						A future runner should consume the IR through adapters rather than adding Fluid
+						objects to the semantic model.
+					</p>
+					<div class="flow">
+						<span>FluidScenario IR</span><b>→</b><span>harness adapter</span><b>→</b>
+						<span>ITestObjectProvider</span><b>+</b><span>IOpProcessingController</span><b>+</b>
+						<span>summary helpers</span><b>→</b><span>observations</span>
+					</div>
+
+					<h3>Likely adapter responsibilities</h3>
+					<ul>
+						<li>map logical clients to real containers and entry points;</li>
+						<li>map opaque DataStore operations to a minimal test DataStore op source;</li>
+						<li>pause/resume/process inbound and outbound queues;</li>
+						<li>run synchronization barriers;</li>
+						<li>invoke summarizer helpers and observe summary ops/acks;</li>
+						<li>wrap storage interfaces to count snapshot fetches;</li>
+						<li>capture and reload pending/full state artifacts;</li>
+						<li>evaluate expectation records and produce domain-level failures.</li>
+					</ul>
+
+					<div class="callout success">
+						The semantic model is already executor-ready: commands and expectations are
+						serializable discriminated unions, client IDs are stable, and artifacts have explicit
+						provenance.
+					</div>
+				</section>
+
+				<section id="sources">
+					<h2>Source-grounding map</h2>
+					<details open>
+						<summary>Loader and container lifecycle</summary>
+						<ul>
+							<li><code>packages/loader/container-loader/src/loader.ts</code></li>
+							<li><code>packages/loader/container-loader/src/container.ts</code></li>
+							<li><code>packages/loader/container-loader/src/connectionState.ts</code></li>
+							<li><code>packages/loader/container-loader/src/connectionStateHandler.ts</code></li>
+							<li><code>packages/loader/container-loader/src/serializedStateManager.ts</code></li>
+							<li><code>packages/loader/container-loader/src/createAndLoadContainerUtils.ts</code></li>
+						</ul>
+					</details>
+					<details>
+						<summary>Container Runtime and DataStores</summary>
+						<ul>
+							<li><code>packages/runtime/container-runtime/src/containerRuntime.ts</code></li>
+							<li><code>packages/runtime/container-runtime/src/channelCollection.ts</code></li>
+							<li><code>packages/runtime/container-runtime/src/dataStoreContext.ts</code></li>
+							<li><code>packages/runtime/container-runtime/src/pendingStateManager.ts</code></li>
+						</ul>
+					</details>
+					<details>
+						<summary>Operation lifecycle</summary>
+						<ul>
+							<li><code>packages/runtime/container-runtime/src/opLifecycle/README.md</code></li>
+							<li><code>packages/runtime/container-runtime/src/opLifecycle/outbox.ts</code></li>
+							<li>
+								<code>packages/runtime/container-runtime/src/opLifecycle/remoteMessageProcessor.ts</code>
+							</li>
+							<li>
+								<code>packages/runtime/container-runtime/src/opLifecycle/opGroupingManager.ts</code>
+							</li>
+							<li><code>packages/runtime/container-runtime/src/opLifecycle/opSplitter.ts</code></li>
+						</ul>
+					</details>
+					<details>
+						<summary>Summaries and snapshots</summary>
+						<ul>
+							<li>
+								<code>packages/runtime/container-runtime/src/summary/summaryCollection.ts</code>
+							</li>
+							<li><code>packages/runtime/container-runtime/src/summary/summaryManager.ts</code></li>
+							<li>
+								<code
+									>packages/runtime/container-runtime/src/summary/summarizerNode/summarizerNode.ts</code
+								>
+							</li>
+							<li>
+								<code
+									>packages/runtime/container-runtime/src/summary/summaryDelayLoadedModule/summaryGenerator.ts</code
+								>
+							</li>
+							<li><code>packages/loader/container-loader/src/snapshotRefresher.ts</code></li>
+						</ul>
+					</details>
+					<details>
+						<summary>Driver interfaces</summary>
+						<ul>
+							<li><code>packages/common/driver-definitions/src/storage.ts</code></li>
+							<li><code>packages/common/driver-definitions/src/urlResolver.ts</code></li>
+							<li><code>packages/common/driver-definitions/src/driverError.ts</code></li>
+						</ul>
+					</details>
+				</section>
+
+				<section id="glossary">
+					<h2>Glossary</h2>
+					<dl>
+						<dt><strong>Internal DSL</strong></dt>
+						<dd>A domain language expressed through the syntax and type system of a host language.</dd>
+						<dt><strong>Semantic model / IR</strong></dt>
+						<dd>The plain-data representation produced by the fluent syntax.</dd>
+						<dt><strong>Progressive interface</strong></dt>
+						<dd>
+							A builder interface that returns a narrower next interface, making invalid method
+							orderings fail to compile.
+						</dd>
+						<dt><strong>Artifact provenance</strong></dt>
+						<dd>
+							Information about how a snapshot or pending state was produced, used to validate
+							legal future transitions.
+						</dd>
+						<dt><strong>Op virtualization</strong></dt>
+						<dd>
+							Container Runtime transformations that group, compress, and chunk logical runtime
+							operations for transport, then reverse those transforms inbound.
+						</dd>
+						<dt><strong>Data virtualization</strong></dt>
+						<dd>
+							Lazy loading of DataStore snapshot content by <code>loadingGroupId</code>. It is
+							distinct from op virtualization.
+						</dd>
+						<dt><strong>Saved op</strong></dt>
+						<dd>A sequenced op after the base snapshot, replayed during pending-state load.</dd>
+						<dt><strong>Stashed op</strong></dt>
+						<dd>
+							A local pending op applied at its original reference sequence and later
+							resubmitted/reconciled.
+						</dd>
+					</dl>
+				</section>
+			</main>
+		</div>
+
+		<footer>
+			Fluid Framework Container Runtime collaboration DSL proof of concept.
+		</footer>
+	</body>
+</html>
