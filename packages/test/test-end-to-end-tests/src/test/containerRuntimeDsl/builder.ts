@@ -20,10 +20,8 @@ import {
 	type RuntimeConfiguration,
 	type ScenarioCoverage,
 	type ScenarioSource,
-	type OperationBunch,
 	type ScenarioStep,
 	type SequenceRef,
-	type SnapshotFetchExpectation,
 	type SubmissionCommand,
 	type SummaryExpectation,
 	type SummaryState,
@@ -77,15 +75,10 @@ export interface ScenarioSteps<ClientName extends string> {
 	expectClient(client: ClientName): ClientExpectationScope;
 	expectOperation(operation: string): OperationExpectationTarget<ClientName>;
 	expectBatch(batch: string): BatchExpectationScope;
-	/**
-	 * How one sequenced message's operations are split for dispatch.
-	 */
-	expectBunches(at: SequenceRef): BunchExpectationScope;
 	expectPendingReplay(client: ClientName): PendingReplayExpectationScope;
 	expectPendingState(pendingState: string): PendingStateExpectationScope;
 	expectSummary(summary: string): SummaryExpectationScope;
 	expectDataStore(client: ClientName, dataStore: string): DataStoreExpectationScope;
-	expectSnapshotFetch(client: ClientName): SnapshotFetchExpectationScope;
 	expectDelivery(client: ClientName): DeliveryExpectationScope;
 	expectOrder(before: SequenceRef, after: SequenceRef): void;
 	expectConvergence(...clients: readonly ClientName[]): void;
@@ -104,17 +97,11 @@ export interface ClientActions {
 	close(): void;
 	createDataStore(dataStore: string): void;
 	makeDataStoreVisible(dataStore: string): void;
-	realizeDataStore(dataStore: string): void;
 	submitOperation(operation: DataStoreOperation): void;
 	submitBatch(batch: BatchDefinition): void;
-	resubmitBatch(options: { readonly batch: string; readonly as?: string }): void;
+	resubmitBatch(options: { readonly batch: string }): void;
 	capturePendingState(pendingState: string): void;
-	requestLatestSnapshotRefresh(snapshot?: string): void;
-	summarize(options: {
-		readonly id: string;
-		readonly fullTree?: boolean;
-		readonly trackState?: boolean;
-	}): void;
+	summarize(options: { readonly id: string }): void;
 }
 
 export interface ConcurrentSubmissions<ClientName extends string> {
@@ -124,7 +111,7 @@ export interface ConcurrentSubmissions<ClientName extends string> {
 export interface ConcurrentClientActions {
 	submitOperation(operation: DataStoreOperation): void;
 	submitBatch(batch: BatchDefinition): void;
-	resubmitBatch(options: { readonly batch: string; readonly as?: string }): void;
+	resubmitBatch(options: { readonly batch: string }): void;
 }
 
 export interface ProcessingActions {
@@ -134,13 +121,10 @@ export interface ProcessingActions {
 
 export interface SequencedOperationsOptions {
 	readonly batch?: string;
-	readonly batchId?: string;
 	readonly batchPosition?: BatchPosition;
 	readonly virtualization?: WireVirtualization;
 	readonly clientSequence?: number;
 	readonly referenceSequence?: SequenceRef;
-	readonly minimumSequence?: SequenceRef;
-	readonly duplicateOf?: string;
 }
 
 export interface SequenceActions<ClientName extends string> {
@@ -167,9 +151,6 @@ export interface SequenceActions<ClientName extends string> {
 			readonly referenceSequence?: SequenceRef;
 		},
 	): void;
-	join(at: string, client: ClientName): void;
-	leave(at: string, client: ClientName): void;
-	noop(at: string, client?: ClientName): void;
 	summarize(at: string, from: ClientName, summary: string): void;
 	summaryAck(at: string, summary: string, snapshot: string): void;
 	summaryNack(at: string, summary: string, retryAfterSeconds?: number): void;
@@ -181,7 +162,6 @@ export interface ServiceActions<ClientName extends string> {
 	 */
 	deliver(client: ClientName): DeliveryScope;
 	synchronize(...clients: readonly ClientName[]): void;
-	captureFullContainerState(pendingState: string): void;
 	completeAttach(client: ClientName): void;
 }
 
@@ -212,15 +192,8 @@ export interface BatchExpectationScope {
 	}): void;
 }
 
-export interface BunchExpectationScope {
-	toBe(bunches: readonly OperationBunch[]): void;
-}
-
 export interface PendingReplayExpectationScope {
-	toPreserve(options: {
-		readonly batches: readonly string[];
-		readonly rebasedBatches?: readonly string[];
-	}): void;
+	toPreserve(options: { readonly batches: readonly string[] }): void;
 }
 
 export interface PendingStateExpectationScope {
@@ -241,10 +214,6 @@ export interface DataStoreExpectationScope {
 			readonly containsOperations?: readonly string[];
 		},
 	): void;
-}
-
-export interface SnapshotFetchExpectationScope {
-	toBe(state: Omit<SnapshotFetchExpectation, "kind" | "client">): void;
 }
 
 export interface DeliveryExpectationScope {
@@ -401,10 +370,6 @@ class ScenarioStepsImpl<ClientName extends string> implements ScenarioSteps<Clie
 		return new BatchExpectationScopeImpl(batch, this.record);
 	}
 
-	public expectBunches(at: SequenceRef): BunchExpectationScope {
-		return new BunchExpectationScopeImpl(at, this.record);
-	}
-
 	public expectPendingReplay(client: ClientName): PendingReplayExpectationScope {
 		return new PendingReplayExpectationScopeImpl(client, this.record);
 	}
@@ -419,10 +384,6 @@ class ScenarioStepsImpl<ClientName extends string> implements ScenarioSteps<Clie
 
 	public expectDataStore(client: ClientName, dataStore: string): DataStoreExpectationScope {
 		return new DataStoreExpectationScopeImpl(client, dataStore, this.record);
-	}
-
-	public expectSnapshotFetch(client: ClientName): SnapshotFetchExpectationScope {
-		return new SnapshotFetchExpectationScopeImpl(client, this.record);
 	}
 
 	public expectDelivery(client: ClientName): DeliveryExpectationScope {
@@ -466,12 +427,11 @@ class SubmissionActionsImpl {
 		this.submit({ kind: "submitBatch", client: this.client, batch });
 	}
 
-	public resubmitBatch(options: { readonly batch: string; readonly as?: string }): void {
+	public resubmitBatch(options: { readonly batch: string }): void {
 		this.submit({
 			kind: "resubmitBatch",
 			client: this.client,
 			batch: options.batch,
-			...(options.as === undefined ? {} : { batchId: options.as }),
 		});
 	}
 }
@@ -534,33 +494,15 @@ class ClientActionsImpl extends SubmissionActionsImpl implements ClientActions {
 		this.command({ kind: "makeDataStoreVisible", client: this.client, dataStore });
 	}
 
-	public realizeDataStore(dataStore: string): void {
-		this.command({ kind: "realizeDataStore", client: this.client, dataStore });
-	}
-
 	public capturePendingState(pendingState: string): void {
 		this.command({ kind: "capturePendingState", client: this.client, pendingState });
 	}
 
-	public requestLatestSnapshotRefresh(snapshot?: string): void {
-		this.command({
-			kind: "requestLatestSnapshotRefresh",
-			client: this.client,
-			...(snapshot === undefined ? {} : { snapshot }),
-		});
-	}
-
-	public summarize(options: {
-		readonly id: string;
-		readonly fullTree?: boolean;
-		readonly trackState?: boolean;
-	}): void {
+	public summarize(options: { readonly id: string }): void {
 		this.command({
 			kind: "summarize",
 			client: this.client,
 			summary: options.id,
-			...(options.fullTree === undefined ? {} : { fullTree: options.fullTree }),
-			...(options.trackState === undefined ? {} : { trackState: options.trackState }),
 		});
 	}
 
@@ -635,18 +577,6 @@ class SequenceActionsImpl<ClientName extends string> implements SequenceActions<
 		});
 	}
 
-	public join(at: string, client: ClientName): void {
-		this.entry({ kind: "join", at, client });
-	}
-
-	public leave(at: string, client: ClientName): void {
-		this.entry({ kind: "leave", at, client });
-	}
-
-	public noop(at: string, client?: ClientName): void {
-		this.entry({ kind: "noop", at, ...(client === undefined ? {} : { client }) });
-	}
-
 	public summarize(at: string, from: ClientName, summary: string): void {
 		this.entry({ kind: "summarize", at, client: from, summary });
 	}
@@ -687,13 +617,6 @@ class ServiceActionsImpl<ClientName extends string> implements ServiceActions<Cl
 		this.record({
 			kind: "command",
 			command: { kind: "synchronize", clients },
-		});
-	}
-
-	public captureFullContainerState(pendingState: string): void {
-		this.record({
-			kind: "command",
-			command: { kind: "captureFullContainerState", pendingState },
 		});
 	}
 
@@ -788,30 +711,13 @@ class BatchExpectationScopeImpl implements BatchExpectationScope {
 	}
 }
 
-class BunchExpectationScopeImpl implements BunchExpectationScope {
-	public constructor(
-		private readonly at: SequenceRef,
-		private readonly record: StepRecorder,
-	) {}
-
-	public toBe(bunches: readonly OperationBunch[]): void {
-		this.record({
-			kind: "expectation",
-			expectation: { kind: "operationBunches", at: this.at, bunches },
-		});
-	}
-}
-
 class PendingReplayExpectationScopeImpl implements PendingReplayExpectationScope {
 	public constructor(
 		private readonly client: string,
 		private readonly record: StepRecorder,
 	) {}
 
-	public toPreserve(options: {
-		readonly batches: readonly string[];
-		readonly rebasedBatches?: readonly string[];
-	}): void {
+	public toPreserve(options: { readonly batches: readonly string[] }): void {
 		this.record({
 			kind: "expectation",
 			expectation: { kind: "pendingReplay", client: this.client, ...options },
@@ -870,20 +776,6 @@ class DataStoreExpectationScopeImpl implements DataStoreExpectationScope {
 				realization,
 				...options,
 			},
-		});
-	}
-}
-
-class SnapshotFetchExpectationScopeImpl implements SnapshotFetchExpectationScope {
-	public constructor(
-		private readonly client: string,
-		private readonly record: StepRecorder,
-	) {}
-
-	public toBe(state: Omit<SnapshotFetchExpectation, "kind" | "client">): void {
-		this.record({
-			kind: "expectation",
-			expectation: { kind: "snapshotFetch", client: this.client, ...state },
 		});
 	}
 }

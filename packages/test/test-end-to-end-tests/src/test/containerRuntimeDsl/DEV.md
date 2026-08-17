@@ -2,7 +2,9 @@
 
 This folder contains a proof-of-concept internal TypeScript DSL for describing collaboration among Fluid clients at the Loader and Container Runtime layers.
 
-Start with [guide.html](./guide.html). It explains DSL concepts, Fluid-specific vocabulary, architecture grounding, the trace model, the validator, and all ten source-test restatements.
+Start with [guide.html](./guide.html). It explains DSL concepts, Fluid-specific vocabulary,
+architecture grounding, the trace model, and the six source-test restatements that form the
+full-circle proof of concept.
 
 ## Files
 
@@ -10,7 +12,7 @@ Start with [guide.html](./guide.html). It explains DSL concepts, Fluid-specific 
 - `builder.ts` — Progressive fluent grammar that compiles into the semantic model.
 - `validator.ts` — Current proof-of-concept combining structural validation, trace checking,
   and semantic derivation. The target responsibility split is described below.
-- `scenarios.ts` — Ten restatements of existing end-to-end tests.
+- `scenarios.ts` — Six focused restatements of existing end-to-end tests.
 - `fluidScenarioDsl.spec.ts` — Focused positive and negative tests.
 - `guide.html` — Comprehensive standalone guide.
 
@@ -48,12 +50,12 @@ responsibilities among a scenario compiler, runtime executor, and optional refer
 7. Submission, sequencing, and processing are three distinct events with three distinct verbs.
 8. Sequence positions are symbolic names, not integers. The trace order defines the sequence
    numbers; a scenario never writes `sequenceNumber: 7`.
-9. Service-generated messages — summary acks and nacks, join, leave, noop — are trace entries,
-   not client commands.
-10. `ConnectionState`, connection mode, read-only state, and service environment are orthogonal.
+9. Service-generated summary acks and nacks are trace entries, not client commands.
+10. Attach state, connection state, and service environment are separate lifecycle axes.
 11. Serialized container state records attach-state provenance. Rehydrating serialized
     `Attaching` state yields an attached container.
-12. `getPendingLocalState` output and `captureFullContainerState` output are distinct artifact kinds.
+12. Serialized detached-container state and attached pending-local state are distinct artifact
+    kinds with distinct load paths.
 13. Expectations are not trusted merely because a scenario declares them. Structural claims
     are checked by the scenario compiler, actual Fluid behavior by the executor, and selected
     independent predictions by an optional reference model.
@@ -70,13 +72,10 @@ responsibilities among a scenario compiler, runtime executor, and optional refer
 | Concurrency | `concurrently(...)` | Submissions with no relative order. |
 | Sequencing | `sequence().operations(...)` | One wire message enters the total order. |
 | Wire fragment | `sequence().chunk(...)` | A non-final chunk that reconstructs nothing. |
-| Membership | `sequence().join / leave` | A join is the point a client becomes live and has caught up; a leave retires it from the live set. |
-| Window nudge | `sequence().noop` | Moves a live client's reference position without carrying an operation. |
 | Summary op | `sequence().summarize(...)` | `MessageType.Summarize` in the total order. |
 | Summary outcome | `sequence().summaryAck / summaryNack` | Service-generated sequenced messages. |
 | Delivery | `service().deliver(id).through(pos)` | Advance one client's processing cursor. |
 | Barrier | `service().synchronize(...)` | Advance the named (or all eligible) clients to the newest position. |
-| Dispatch | `expectBunches(position)` | How one sequenced message splits into per-DataStore bunches. |
 
 ### Ordering metadata
 
@@ -89,8 +88,7 @@ symbolically:
 | `clientId` | `client` on the entry | required except for service-generated entries |
 | `clientSequenceNumber` | `clientSequence` | omitted unless asserted |
 | `referenceSequenceNumber` | `referenceSequence`, a position name or `"baseline"` | the submitter's cursor at submission time; the latest prior entry for service-generated messages |
-| `minimumSequenceNumber` | `minimumSequence`, a position name or `"baseline"` | carried forward from the previous entry |
-| batch metadata | `batchPosition`, `batchId` | derived identity `client_[clientSequence]` when omitted |
+| batch metadata | `batchPosition` | omitted unless the scenario needs batch boundaries |
 | virtualization | `virtualization.grouped / compressed / chunk` | none |
 
 ### Checked invariants
@@ -104,28 +102,17 @@ of every scenario. This is the proof-of-concept placement, not the intended perm
 | `clientSequenceMonotonic` | Scenario compiler: explicitly declared client sequence numbers advance within a connection epoch | Executor: emitted client sequence numbers advance and reset according to the runtime contract |
 | `batchContiguity` | Scenario compiler: declared wire entries and markers form one contiguous transmission | Executor: observed batching and virtualization match |
 | `causalReferenceSequence` | Scenario compiler: declared references precede entries and are not ahead of the declared submitter cursor | Executor: observed reference sequence numbers obey the protocol contract |
-| `minimumSequenceMonotonic` | Scenario compiler: basic declared monotonicity and reference validity | Executor, optionally compared with a reference model: collaboration-window behavior |
 | `wireReconstruction` | Scenario compiler: declared chunk metadata is internally coherent | Executor: actual reconstruction and abandonment behavior |
-| `exactlyOnceApplication` | No mandatory structural prediction beyond coherent operation identities | Executor, optionally compared with a reference model: actual application and fork behavior |
+| `exactlyOnceApplication` | Scenario compiler: one logical operation may enter the declared trace once | Executor, optionally compared with a reference model: actual application and replay reconciliation |
 | `orderedDelivery` | Scenario compiler: declared cursor movement is forward and references valid positions | Executor: actual queue, connection, pinning, and delivery behavior |
 
-### Membership and catch-up
+### Connection and processing position
 
-`ConnectionState` is `disconnected`, `catchingUp`, or `connected`. A client passes through
-`catchingUp` only when the scenario states its membership with a `join` entry; otherwise
-obtaining a connection is one step. This is opt-in per client, so a scenario pays for the
-precision only where it needs it.
-
-A join entry means three things at once, matching `connectionStateHandler.ts`: the client is a
-live member from that position, it has processed everything ordered before it, and only from
-there can its own submissions be sequenced. A client whose inbound queue is paused stays
-`catchingUp` until it actually processes its join.
-
-Losing a connection does not retire a membership; only a sequenced `leave` does, which is why a
-reconnecting client waits for its own leave before it is live again. Until then the retiring
-membership still pins the collaboration window at its old reference position. A leave is legal
-once the client is no longer `connected`, so it may arrive after the replacement connection is
-already established.
+The proof of concept models service connection as `connected` or `disconnected`, independently
+from a client's processing cursor. Disconnecting stops delivery without deleting the shared
+trace; reconnecting permits the executor to advance that client through the positions it missed.
+Quorum membership and collaboration-window details are deliberately outside this smaller
+language.
 
 ### Derived facts
 
@@ -136,8 +123,6 @@ submission list, and an applied-operation multiset. From those it derives and ch
 - `expectOperation(op).at(client).toBeAppliedTimes(n)`;
 - `expectDelivery(client).toBe({ loadedAt, processedThrough })`;
 - `expectBatch(b).toBeVirtualizedAs({ grouped, compressed, chunked, originalOperationCount, wireMessages })`;
-- `expectBunches(position).toBe([...])`, splitting one sequenced message wherever the target
-  DataStore changes, mirroring `channelCollection.ts`;
 - `expectPendingReplay(client).toPreserve({ batches })`, the client's outstanding submissions
   collapsed to their batches in submission order;
 - `expectClient(c).toBe({ attach, connection, environment, dirty, closed, inbound, outbound })`;
@@ -156,29 +141,14 @@ immediately, and processing its own sequenced copy is an acknowledgement rather 
 application. A container that loads at a position holds the effect of everything sequenced up
 to it. Both facts are what make `exactlyOnceApplication` meaningful across stash and replay.
 
-### Forking is derived, not declared
+### Deliberate focus
 
-A container that sees its own outstanding batch identity arrive under a different client
-identity closes rather than apply the work twice, matching `pendingStateManager.ts:596-650`.
-The validator derives this while advancing a cursor: the container stops at the position before
-the offending entry, its phase becomes closed, and its outcome becomes `forkedContainer`. No
-scenario declares an exemption, and `exactlyOnceApplication` still holds, because the container
-never applied the operation a second time.
-
-This matters because without it the whole family of fork and duplicate-detection tests would be
-unwritable: their subject is a failure that an unconditional exactly-once invariant would
-otherwise reject as an invalid scenario.
-
-### Authoring cost, measured
-
-Separating submission from sequencing costs roughly half again as many lines across the ten
-restatements. Of 46 sequenced entries, 9 carry no metadata beyond the operations they deliver,
-and only 5 are both metadata-free and never referenced again. Those 5 are the true ceremony;
-the other 41 either carry ordering metadata or have their position named by a later step.
-
-A combined `submitAndSequence` verb was considered and rejected. It would not have damaged the
-model, since the intermediate representation would still hold two records, but it would have
-added a second way to say a common thing in exchange for shortening 11% of entries.
+The six scenarios form one narrative arc: create or load a container, submit work, declare its
+sequence order, control per-client delivery, summarize and load a snapshot, and preserve pending
+work across rehydration. Membership protocol, fork detection, frozen full-state capture,
+loading groups, and snapshot-refresh policy were removed from the current language so the
+proof demonstrates its central ideas without presenting a catalog of every Container Runtime
+feature.
 
 ## Architecture grounding
 
@@ -194,9 +164,9 @@ added a second way to say a common thing in exchange for shortening 11% of entri
 The modeled lifecycle preserves:
 
 - `Detached -> Attaching -> Attached`
-- `Disconnected`, `EstablishingConnection`, `CatchingUp`, and `Connected`
+- disconnected and connected service operation
 - serialized-state provenance for detached versus attaching containers
-- ordinary pending-local-state capture versus self-contained full-container capture
+- pending-local-state capture and online rehydration
 
 ### Delta manager and the sequencing boundary
 
@@ -233,7 +203,6 @@ monotonicity is scoped to a connection epoch and reference positions are re-deri
 - `packages/runtime/container-runtime/src/opLifecycle/opGroupingManager.ts`
 - `packages/runtime/container-runtime/src/opLifecycle/opSplitter.ts`
 - `packages/runtime/container-runtime/src/opLifecycle/opCompressor.ts`
-- `packages/runtime/container-runtime/src/opLifecycle/duplicateBatchDetector.ts`
 
 Facts the trace model encodes directly:
 
@@ -243,11 +212,6 @@ Facts the trace model encodes directly:
 - Chunking splits one payload across **many** sequenced messages; only the final chunk carries
   the reconstructed payload, original type, metadata, and compression marker.
 - The inbound order is unchunk, decompress, unroll, ungroup, then batch classification.
-- A wire batch identity is an explicit `batchId` or the derived `${clientId}_[${batchStartCsn}]`,
-  and `DuplicateBatchDetector` evicts entries older than the inbound minimum sequence number.
-- Batch-id tracking is derived from turn-based flushing plus grouped batching unless the
-  `Fluid.ContainerRuntime.DisableBatchIdTracking` gate is represented by
-  `disableBatchIdTracking`.
 
 ### Summaries and snapshots
 
@@ -255,7 +219,6 @@ Facts the trace model encodes directly:
 - `packages/runtime/container-runtime/src/summary/summaryManager.ts`
 - `packages/runtime/container-runtime/src/summary/summarizerNode/summarizerNode.ts`
 - `packages/runtime/container-runtime/src/summary/summaryDelayLoadedModule/summaryGenerator.ts`
-- `packages/loader/container-loader/src/snapshotRefresher.ts`
 
 `SummaryCollection` watches the op stream, keys pending summaries by the summary op's own
 sequence number, and resolves them through `ISummaryAck.summaryProposal.summarySequenceNumber`.
@@ -267,8 +230,7 @@ op that is already in the trace.
 - `packages/common/driver-definitions/src/storage.ts`
 - `packages/common/driver-definitions/src/urlResolver.ts`
 
-The DSL may describe service-backed versus frozen/offline environments, requested connection
-mode, snapshot fetch purpose and count, and opaque snapshot/version/summary handles. It must
+The DSL describes service-backed loading and opaque snapshot/version/summary handles. It must
 not encode driver endpoint names, tokens, cache implementations, socket behavior, or concrete
 driver classes.
 
@@ -292,7 +254,7 @@ Fluid scenario kernel
 |- Runtime scenario layer
 |  `- submit, batch, summarize, DataStore operations, and replay
 `- Protocol trace layer
-   `- sequence, deliver, join, leave, noop, ack, and nack
+   `- sequence, deliver, summary ack, and summary nack
 ```
 
 The Driver and the DataStore operation boundary remain good external seams: the DSL needs only
@@ -611,9 +573,9 @@ states or invariant results without driving Fluid, rejecting structural input, o
 production implementation it checks.
 
 Initial candidates should be stable protocol contracts where independent prediction aids
-diagnosis, such as collaboration-window constraints or exactly-once outcomes. Dense declared
-ordering and explicitly authored client-sequence monotonicity remain scenario-compiler checks;
-the corresponding runtime emissions remain executor observations.
+diagnosis, such as exactly-once replay reconciliation. Dense declared ordering and explicitly
+authored client-sequence monotonicity remain scenario-compiler checks; the corresponding runtime
+emissions remain executor observations.
 
 The reference model is optional per rule and per scenario. Absence of a model prediction must
 not prevent an executable scenario from running.
@@ -673,24 +635,15 @@ with the selected profile supplied by the execution environment.
 ## Explicit limitations
 
 - Signals, GC, aliasing, blob attach, and staging mode are not modeled.
-- Quorum proposals, accepts, and rejects are not modeled. Membership is modeled through `join`
-  and `leave`, and the collaboration window is bounded by the least reference position among
-  live write clients, but the validator never computes a minimum sequence number for the
-  scenario; it only rejects a declared one that violates those bounds.
+- Quorum membership, collaboration-window/minimum-sequence behavior, read-mode negotiation, and
+  protocol noops are not modeled.
 - Signal ordering relative to ops is not modeled.
-- Snapshot fetch counts, summary tree/handle reuse, DataStore realization, and summary stage
-  remain declarative observations that a future executor must check. So does `rebasedBatches`,
-  because rebasing happens before anything reaches the total order and leaves no trace to check.
-- A read-mode connection cannot sequence pending submissions and is excluded from the
-  collaboration-window floor. `connect()` models the transition to a write connection; the DSL
-  does not yet expose an option for reconnecting explicitly in read mode.
-- `deltaConnection: "delayed"` records that the live delta stream is deferred. The validator
-  models that client as disconnected; storage-based catch-up before `connect()` is not yet a
-  separate delivery source.
+- Driver cache and snapshot-fetch policy, loading groups, frozen full-container-state capture,
+  fork/duplicate-batch detection, and dispatch bunching are not modeled.
+- Summary tree/handle reuse and DataStore realization remain declarative observations that a
+  future executor must check.
 - `expectPendingReplay` currently describes named batches only. The validator reports loose
   pending operations instead of silently omitting them; model those as one-operation batches
   when replay order matters.
-- Bunching is derived from the target DataStore only. The Container Runtime also splits a bunch
-  when the inner op type changes, and op types below the DataStore boundary stay opaque here.
 - There is no executor. The IR is executor-ready but nothing runs it against
   `ITestObjectProvider` yet.

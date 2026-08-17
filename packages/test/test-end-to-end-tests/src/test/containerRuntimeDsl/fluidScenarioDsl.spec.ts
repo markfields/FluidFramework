@@ -61,30 +61,12 @@ const sources = {
 		suite: "Summaries",
 		test: "On demand summaries",
 	},
-	fork: {
-		file: "packages/test/test-end-to-end-tests/src/test/offline/stashedOps.spec.ts",
-		suite: "Offline Phase 3",
-		test: "Single-Threaded Fork: Closes (ForkedContainerError) when ops are submitted with different clientId from pendingLocalState (via Counter DDS)",
-	},
-	bunching: {
-		file: "packages/test/test-end-to-end-tests/src/test/opBunching.spec.ts",
-		suite: "Ops for DDSes are bunched together",
-		test: "ops across two data store interleaved",
-	},
 } as const satisfies Record<string, ScenarioSource>;
-
-const secondary = { id: "secondary" } as const;
 
 const groupedDocument: DocumentDefinition = document("collaboration", [root], {
 	flushMode: "turnBased",
 	enableGroupedBatching: true,
 });
-
-const twoStoreGroupedDocument: DocumentDefinition = document(
-	"collaboration",
-	[root, secondary],
-	{ flushMode: "turnBased", enableGroupedBatching: true },
-);
 
 function scenarioOf<const Names extends readonly [string, ...string[]]>(
 	name: string,
@@ -170,24 +152,6 @@ const invariantProbes: Readonly<
 				});
 			}),
 	},
-	minimumSequenceMonotonic: {
-		fragment: "moved backwards",
-		build: () =>
-			probe("minimumSequenceMonotonic", (s) => {
-				s.client("alice").submitOperation({ id: "first", dataStore: "root" });
-				s.client("alice").submitOperation({ id: "second", dataStore: "root" });
-				s.client("alice").submitOperation({ id: "third", dataStore: "root" });
-				s.sequence().operations("seq-first", "alice", ["first"]);
-				s.service().deliver("alice").through("seq-first");
-				s.sequence().operations("seq-second", "alice", ["second"], {
-					referenceSequence: "seq-first",
-					minimumSequence: "seq-first",
-				});
-				s.sequence().operations("seq-third", "alice", ["third"], {
-					minimumSequence: "baseline",
-				});
-			}),
-	},
 	wireReconstruction: {
 		fragment: "was never reconstructed",
 		build: () =>
@@ -213,7 +177,7 @@ const invariantProbes: Readonly<
 			),
 	},
 	exactlyOnceApplication: {
-		fragment: "must be marked as a duplicate",
+		fragment: "is already sequenced",
 		build: () =>
 			probe(
 				"exactlyOnceApplication",
@@ -222,18 +186,9 @@ const invariantProbes: Readonly<
 						id: "batch",
 						operations: [{ id: "edit", dataStore: "root" }],
 					});
-					s.sequence().operations("seq-first", "alice", ["edit"], {
-						batch: "batch",
-						batchPosition: "single",
-						virtualization: { grouped: true },
-					});
-					s.client("alice").resubmitBatch({ batch: "batch", as: "batch-id" });
-					s.sequence().operations("seq-second", "alice", ["edit"], {
-						batch: "batch",
-						batchPosition: "single",
-						batchId: "batch-id",
-						virtualization: { grouped: true },
-					});
+					s.sequence().operations("seq-first", "alice", ["edit"], { batch: "batch" });
+					s.client("alice").resubmitBatch({ batch: "batch" });
+					s.sequence().operations("seq-second", "alice", ["edit"], { batch: "batch" });
 				},
 				groupedDocument,
 			),
@@ -284,8 +239,8 @@ function assertReports(scenario: FluidScenario, fragment: string): void {
 
 describe("Fluid Container Runtime collaboration DSL", () => {
 	describe("acceptance set", () => {
-		it("validates ten source-traceable e2e scenarios", () => {
-			assert.strictEqual(containerRuntimeDslScenarios.length, 10);
+		it("validates six source-traceable e2e scenarios", () => {
+			assert.strictEqual(containerRuntimeDslScenarios.length, 6);
 			for (const scenario of containerRuntimeDslScenarios) {
 				assert.doesNotThrow(() => assertValidScenario(scenario), scenario.name);
 			}
@@ -298,7 +253,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			for (const required of [
 				"container-lifecycle",
 				"container-load",
-				"driver-contracts",
 				"op-stream",
 				"op-ordering",
 				"op-virtualization",
@@ -306,7 +260,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 				"replay",
 				"snapshot",
 				"summarization",
-				"data-virtualization",
 			] as const) {
 				assert(actualCoverage.has(required), `Missing coverage for ${required}`);
 			}
@@ -501,24 +454,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			assertReports(scenario, "is disconnected, so nothing it submitted can be sequenced");
 		});
 
-		it("rejects sequencing from a read-mode connection", () => {
-			const scenario = scenarioOf(
-				"sequencing while read-only at the transport layer",
-				sources.container,
-				["alice"],
-				(s) => {
-					s.client("alice").load({
-						from: { kind: "service" },
-						requestedConnectionMode: "read",
-					});
-					s.client("alice").submitOperation({ id: "edit", dataStore: "root" });
-					s.sequence().operations("seq-edit", "alice", ["edit"]);
-				},
-			);
-
-			assertReports(scenario, "is connected in read mode");
-		});
-
 		it("rejects sequencing from a client whose outbound queue is paused", () => {
 			const scenario = scenarioOf(
 				"sequencing behind a paused outbound queue",
@@ -661,9 +596,9 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 	});
 
 	describe("replay and exactly-once application", () => {
-		it("applies a replayed batch once when the replay preserves the batch identity", () => {
+		it("replays a batch rehydrated from captured pending state", () => {
 			const scenario = scenarioOf(
-				"repeated replay does not duplicate an operation",
+				"rehydrated replay reaches the total order once",
 				sources.stashedOps,
 				["origin", "peer", "resumed"],
 				(s) => {
@@ -675,236 +610,16 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 					});
 					s.client("origin").capturePendingState("stash");
 					s.client("origin").close();
-
-					s.client("resumed").load({
-						from: { kind: "pendingState", pendingState: "stash", mode: "online" },
-					});
-					s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
-					s.sequence().operations("seq-first-replay", "resumed", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "edit-batch-id",
-						clientSequence: 1,
-						virtualization: { grouped: true },
-					});
 
 					s.note(
-						"The client reconnects before processing its own acknowledgement, so it replays the same logical batch a second time.",
+						"The rehydrated container inherits the outstanding submission, so the operation is pending again under a new client identity.",
 					);
-					s.client("resumed").disconnect();
-					s.client("resumed").connect();
-					s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
-					s.sequence().operations("seq-second-replay", "resumed", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "edit-batch-id",
-						clientSequence: 1,
-						duplicateOf: "seq-first-replay",
-						virtualization: { grouped: true },
-					});
-
-					s.service().synchronize();
-					s.expectOperation("edit").at("peer").toBeAppliedTimes(1);
-					s.expectOperation("edit").at("resumed").toBeAppliedTimes(1);
-					s.expectBatch("edit-batch").toBeVirtualizedAs({
-						grouped: true,
-						compressed: false,
-						chunked: false,
-						originalOperationCount: 1,
-						wireMessages: 1,
-					});
-					s.expectConvergence("peer", "resumed");
-					s.expectTrace().toSatisfy(["exactlyOnceApplication"]);
-				},
-				groupedDocument,
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("rejects a repeat that is not declared a duplicate", () => {
-			const scenario = scenarioOf(
-				"undeclared duplicate batch",
-				sources.stashedOps,
-				["origin", "peer", "resumed"],
-				(s) => {
-					s.client("origin").load({ from: { kind: "service" } });
-					s.client("peer").load({ from: { kind: "service" } });
-					s.client("origin").submitBatch({
-						id: "edit-batch",
-						operations: [{ id: "edit", dataStore: "root" }],
-					});
-					s.client("origin").capturePendingState("stash");
-					s.client("origin").close();
 					s.client("resumed").load({
-						from: { kind: "pendingState", pendingState: "stash", mode: "online" },
+						from: { kind: "pendingState", pendingState: "stash" },
 					});
-					s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
-					s.sequence().operations("seq-first-replay", "resumed", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "edit-batch-id",
-						virtualization: { grouped: true },
-					});
-					s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
-					s.sequence().operations("seq-second-replay", "resumed", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "edit-batch-id",
-						virtualization: { grouped: true },
-					});
-					s.service().synchronize();
-				},
-				groupedDocument,
-			);
-
-			const messages = messagesOf(scenario);
-			assert(
-				messages.some((message) =>
-					message.includes("must be marked as a duplicate of the earlier entry"),
-				),
-				messages.join("\n"),
-			);
-			assert(
-				messages.some((message) => message.includes("was already sequenced")),
-				messages.join("\n"),
-			);
-		});
-
-		it("rejects a replay that loses the original batch identity", () => {
-			const scenario = scenarioOf(
-				"replay under a fresh batch identity",
-				sources.stashedOps,
-				["origin", "peer", "resumed"],
-				(s) => {
-					s.client("origin").load({ from: { kind: "service" } });
-					s.client("peer").load({ from: { kind: "service" } });
-					s.client("origin").submitBatch({
-						id: "edit-batch",
-						operations: [{ id: "edit", dataStore: "root" }],
-					});
-					s.client("origin").capturePendingState("stash");
-					s.client("origin").close();
-					s.client("resumed").load({
-						from: { kind: "pendingState", pendingState: "stash", mode: "online" },
-					});
-					s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "original-id" });
-					s.sequence().operations("seq-first-replay", "resumed", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "original-id",
-						virtualization: { grouped: true },
-					});
-					s.client("resumed").resubmitBatch({ batch: "edit-batch", as: "fresh-id" });
-					s.sequence().operations("seq-second-replay", "resumed", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "fresh-id",
-						duplicateOf: "seq-first-replay",
-						virtualization: { grouped: true },
-					});
-				},
-				groupedDocument,
-			);
-
-			assertReports(scenario, "must preserve the original batch id");
-		});
-
-		it("closes a forked container instead of applying the same work twice", () => {
-			const scenario = scenarioOf(
-				"single-threaded fork under a different client identity",
-				sources.fork,
-				["origin", "peer", "winner", "forked"],
-				(s) => {
-					s.client("origin").load({ from: { kind: "service" } });
-					s.client("peer").load({ from: { kind: "service" } });
-					s.client("origin").submitBatch({
-						id: "edit-batch",
-						operations: [{ id: "edit", dataStore: "root" }],
-					});
-					s.client("origin").capturePendingState("stash");
-					s.client("origin").close();
-
-					s.note("The same captured state is rehydrated twice, so two sessions hold it.");
-					s.client("winner").load({
-						from: { kind: "pendingState", pendingState: "stash", mode: "online" },
-					});
-					s.client("forked").load({
-						from: { kind: "pendingState", pendingState: "stash", mode: "online" },
-					});
-					s.client("winner").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
-					s.client("forked").resubmitBatch({ batch: "edit-batch", as: "edit-batch-id" });
-
-					s.sequence().operations("seq-winner", "winner", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "edit-batch-id",
-						clientSequence: 1,
-						virtualization: { grouped: true },
-					});
-					s.note(
-						"The forked session sees its own outstanding batch identity arrive under another client identity, so it closes before applying it.",
-					);
-					s.service().synchronize();
-
-					s.expectClient("forked").toBe({ closed: true, outcome: "forkedContainer" });
-					s.expectClient("winner").toBe({ closed: false });
-					s.expectOperation("edit").at("forked").toBeAppliedTimes(1);
-					s.expectOperation("edit").at("winner").toBeAppliedTimes(1);
-					s.expectOperation("edit").at("peer").toBeAppliedTimes(1);
-					s.expectTrace().toSatisfy(["exactlyOnceApplication"]);
-				},
-				groupedDocument,
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("rejects an explicit batch identity without batch-id tracking", () => {
-			const scenario = scenarioOf(
-				"batch identity without tracking",
-				sources.stashedOps,
-				["alice"],
-				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.client("alice").submitBatch({
-						id: "edit-batch",
-						operations: [{ id: "edit", dataStore: "root" }],
-					});
-					s.sequence().operations("seq-edit", "alice", ["edit"], {
-						batch: "edit-batch",
-						batchPosition: "single",
-						batchId: "edit-batch-id",
-					});
-				},
-				document("collaboration", [root], {
-					disableBatchIdTracking: true,
-				}),
-			);
-
-			assertReports(scenario, "explicit batch identity requires batch-id tracking");
-		});
-
-		it("rejects a rehydrated replay that omits the original batch identity", () => {
-			const scenario = scenarioOf(
-				"rehydrated replay without a batch identity",
-				sources.stashedOps,
-				["origin", "peer", "resumed"],
-				(s) => {
-					s.client("origin").load({ from: { kind: "service" } });
-					s.client("peer").load({ from: { kind: "service" } });
-					s.client("origin").submitBatch({
-						id: "edit-batch",
-						operations: [{ id: "edit", dataStore: "root" }],
-					});
-					s.client("origin").capturePendingState("stash");
-					s.client("origin").close();
-					s.client("resumed").load({
-						from: { kind: "pendingState", pendingState: "stash", mode: "online" },
-					});
-					s.note(
-						"The replay carries a fresh client identity, so a derived batch id would not match the original.",
-					);
+					s.expectOperation("edit").at("resumed").toBe("pending");
+					s.expectPendingState("stash").toContain({ savedOps: 0, stashedOps: 1 });
+					s.client("resumed").resubmitBatch({ batch: "edit-batch" });
 					s.sequence().operations("seq-replay", "resumed", ["edit"], {
 						batch: "edit-batch",
 						batchPosition: "single",
@@ -912,11 +627,51 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 						virtualization: { grouped: true },
 					});
 					s.service().synchronize();
+					s.expectOperation("edit").at("resumed").toBe("acked");
+					s.expectOperation("edit").at("peer").toBeAppliedTimes(1);
+					s.expectOperation("edit").at("resumed").toBeAppliedTimes(1);
+					s.expectConvergence("peer", "resumed");
+					s.expectTrace().toSatisfy();
 				},
 				groupedDocument,
 			);
 
-			assertReports(scenario, "must carry the original batch id");
+			assert.doesNotThrow(() => assertValidScenario(scenario));
+		});
+
+		it("rejects sequencing one logical operation twice", () => {
+			const scenario = scenarioOf(
+				"repeated sequencing of one operation",
+				sources.stashedOps,
+				["alice", "peer"],
+				(s) => {
+					s.client("alice").load({ from: { kind: "service" } });
+					s.client("peer").load({ from: { kind: "service" } });
+					s.client("alice").submitBatch({
+						id: "edit-batch",
+						operations: [{ id: "edit", dataStore: "root" }],
+					});
+					s.sequence().operations("seq-first", "alice", ["edit"], { batch: "edit-batch" });
+					s.note("The replay is offered after the service already ordered the batch.");
+					s.client("alice").resubmitBatch({ batch: "edit-batch" });
+					s.sequence().operations("seq-second", "alice", ["edit"], { batch: "edit-batch" });
+					s.service().synchronize();
+					s.expectTrace().toSatisfy(["exactlyOnceApplication"]);
+				},
+				groupedDocument,
+			);
+
+			const messages = messagesOf(scenario);
+			assert(
+				messages.some((message) => message.includes("is already sequenced")),
+				messages.join("\n"),
+			);
+			assert(
+				messages.some((message) =>
+					message.includes("applied logical operation 'edit' 2 times"),
+				),
+				messages.join("\n"),
+			);
 		});
 	});
 
@@ -1015,7 +770,7 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 					s.client("sender").disconnect();
 					s.expectOperation("large-edit").at("peer").toBe("notProcessed");
 					s.client("sender").connect();
-					s.client("sender").resubmitBatch({ batch: "large-batch", as: "large-batch-id" });
+					s.client("sender").resubmitBatch({ batch: "large-batch" });
 					s.sequence().chunk("seq-replay-chunk-1", "sender", {
 						batch: "large-batch",
 						index: 1,
@@ -1023,7 +778,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 					});
 					s.sequence().operations("seq-replay-chunk-2", "sender", ["large-edit"], {
 						batch: "large-batch",
-						batchId: "large-batch-id",
 						virtualization: {
 							grouped: true,
 							compressed: true,
@@ -1108,6 +862,30 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			assertReports(scenario, "only the final chunk carries operations");
 		});
 
+		it("rejects an ungrouped wire message carrying more than one operation", () => {
+			const scenario = scenarioOf(
+				"ungrouped multi-operation message",
+				sources.summarize,
+				["alice"],
+				(s) => {
+					s.client("alice").load({ from: { kind: "service" } });
+					s.client("alice").submitBatch({
+						id: "plain",
+						operations: [
+							{ id: "root-0", dataStore: "root" },
+							{ id: "root-1", dataStore: "root" },
+						],
+					});
+					s.sequence().operations("seq-plain", "alice", ["root-0", "root-1"], {
+						batch: "plain",
+						batchPosition: "single",
+					});
+				},
+			);
+
+			assertReports(scenario, "an ungrouped wire message carries exactly one");
+		});
+
 		it("rejects a grouped batch that claims more than one sequenced message", () => {
 			const scenario = scenarioOf(
 				"grouped batch spread across messages",
@@ -1185,54 +963,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			assertReports(scenario, "does not advance within 'alice' current connection");
 		});
 
-		it("rejects a minimum sequence number that moves backwards", () => {
-			const scenario = scenarioOf(
-				"regressing minimum sequence number",
-				sources.loadModes,
-				["alice", "bob"],
-				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.client("bob").load({ from: { kind: "service" } });
-					s.client("alice").submitOperation({ id: "first", dataStore: "root" });
-					s.sequence().operations("seq-first", "alice", ["first"]);
-					s.service().synchronize();
-					s.client("alice").submitOperation({ id: "second", dataStore: "root" });
-					s.sequence().operations("seq-second", "alice", ["second"], {
-						minimumSequence: "seq-first",
-					});
-					s.client("alice").submitOperation({ id: "third", dataStore: "root" });
-					s.sequence().operations("seq-third", "alice", ["third"], {
-						minimumSequence: "baseline",
-					});
-				},
-			);
-
-			assertReports(scenario, "Minimum sequence number moved backwards");
-		});
-
-		it("rejects a minimum sequence number past a live submitter's reference position", () => {
-			const scenario = scenarioOf(
-				"minimum sequence number past the reference position",
-				sources.loadModes,
-				["alice", "bob"],
-				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.client("bob").load({ from: { kind: "service" } });
-					s.client("alice").submitOperation({ id: "first", dataStore: "root" });
-					s.sequence().operations("seq-first", "alice", ["first"]);
-					s.client("alice").submitOperation({ id: "second", dataStore: "root" });
-					s.note(
-						"Alice never processed her own first operation, so her reference stays at the baseline.",
-					);
-					s.sequence().operations("seq-second", "alice", ["second"], {
-						minimumSequence: "seq-first",
-					});
-				},
-			);
-
-			assertReports(scenario, "passes the reference sequence number of a live submitter");
-		});
-
 		it("rejects a duplicated sequence position name", () => {
 			const scenario = scenarioOf(
 				"duplicated sequence position",
@@ -1277,34 +1007,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			assert.doesNotThrow(() => assertValidScenario(scenario));
 		});
 
-		it("allows a service acknowledgement after the collaboration window advances", () => {
-			const scenario = scenarioOf(
-				"summary ack after minimum sequence advances",
-				sources.summarize,
-				["main", "summarizer"],
-				(s) => {
-					s.client("main").load({ from: { kind: "service" } });
-					s.client("summarizer").load({ from: { kind: "service" } });
-					s.client("main").submitOperation({ id: "first", dataStore: "root" });
-					s.sequence().operations("seq-first", "main", ["first"]);
-					s.service().synchronize();
-					s.sequence().noop("seq-main-noop", "main");
-					s.sequence().noop("seq-summarizer-noop", "summarizer");
-					s.client("main").submitOperation({ id: "second", dataStore: "root" });
-					s.sequence().operations("seq-second", "main", ["second"], {
-						referenceSequence: "seq-first",
-						minimumSequence: "seq-first",
-					});
-					s.client("summarizer").summarize({ id: "summary-1" });
-					s.sequence().summarize("seq-summary-op", "summarizer", "summary-1");
-					s.sequence().summaryAck("seq-summary-ack", "summary-1", "snapshot-1");
-					s.expectTrace().toSatisfy(["minimumSequenceMonotonic"]);
-				},
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
 		it("rejects an acknowledgement for a summary op that was never sequenced", () => {
 			const scenario = scenarioOf(
 				"acknowledging an unbroadcast summary",
@@ -1321,151 +1023,26 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			assertReports(scenario, "has no sequenced summary op to acknowledge");
 		});
 
-		it("rejects a snapshot refresh that names a snapshot which does not exist", () => {
+		it("tracks a summary nack as the sequenced outcome", () => {
 			const scenario = scenarioOf(
-				"refresh mints no snapshot",
+				"summary nack is a trace entry",
 				sources.summarize,
-				["main"],
+				["summarizer"],
 				(s) => {
-					s.client("main").load({ from: { kind: "service" } });
-					s.client("main").requestLatestSnapshotRefresh("snapshot-from-nowhere");
+					s.client("summarizer").load({ from: { kind: "service" } });
+					s.client("summarizer").summarize({ id: "summary-1" });
+					s.sequence().summarize("seq-summary-op", "summarizer", "summary-1");
+					s.sequence().summaryNack("seq-summary-nack", "summary-1", 10);
+					s.expectSummary("summary-1").toBe("nacked");
+					s.expectOrder("seq-summary-op", "seq-summary-nack");
 				},
 			);
 
-			assertReports(scenario, "does not produce one");
+			assert.doesNotThrow(() => assertValidScenario(scenario));
 		});
 	});
 
-	describe("membership and catch-up", () => {
-		it("treats a join as the point a client becomes live and caught up", () => {
-			const scenario = scenarioOf(
-				"join marks the catch-up point",
-				sources.container,
-				["writer", "joiner"],
-				(s) => {
-					s.client("writer").load({ from: { kind: "service" } });
-					s.client("joiner").load({ from: { kind: "service" } });
-					s.expectClient("joiner").toBe({ connection: "catchingUp" });
-					s.client("writer").submitOperation({ id: "before-join", dataStore: "root" });
-					s.sequence().operations("seq-before-join", "writer", ["before-join"]);
-					s.note("The joiner processes everything ordered before its join position.");
-					s.sequence().join("seq-join", "joiner");
-					s.expectClient("joiner").toBe({ connection: "connected" });
-					s.expectOperation("before-join").at("joiner").toBe("processed");
-					s.expectDelivery("joiner").toBe({
-						processedThrough: { relation: "equal", position: "seq-join" },
-					});
-					s.expectTrace().toSatisfy();
-				},
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("rejects sequencing from a client that has not finished catching up", () => {
-			const scenario = scenarioOf(
-				"sequencing before the join",
-				sources.container,
-				["joiner"],
-				(s) => {
-					s.client("joiner").load({ from: { kind: "service" } });
-					s.client("joiner").submitOperation({ id: "eager", dataStore: "root" });
-					s.sequence().operations("seq-eager", "joiner", ["eager"]);
-					s.sequence().join("seq-join", "joiner");
-				},
-			);
-
-			assertReports(scenario, "'joiner' is disconnected, so nothing it submitted");
-		});
-
-		it("keeps a client catching up while its inbound queue is paused", () => {
-			const scenario = scenarioOf(
-				"join behind a paused inbound queue",
-				sources.loadModes,
-				["writer", "joiner"],
-				(s) => {
-					s.client("writer").load({ from: { kind: "service" } });
-					s.client("joiner").load({ from: { kind: "service" } });
-					s.processing("joiner").pause("inbound");
-					s.client("writer").submitOperation({ id: "edit", dataStore: "root" });
-					s.sequence().operations("seq-edit", "writer", ["edit"]);
-					s.sequence().join("seq-join", "joiner");
-					s.note("The join is ordered, but a paused container has not processed it.");
-					s.expectClient("joiner").toBe({ connection: "catchingUp" });
-					s.expectOperation("edit").at("joiner").toBe("sequenced");
-					s.processing("joiner").resume("inbound");
-					s.service().deliver("joiner").through("seq-join");
-					s.expectClient("joiner").toBe({ connection: "connected" });
-					s.expectOperation("edit").at("joiner").toBe("processed");
-				},
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("does not let join catch-up move a paused load past its pinned position", () => {
-			const scenario = scenarioOf(
-				"join respects a paused load position",
-				sources.loadModes,
-				["writer", "joiner"],
-				(s) => {
-					s.client("writer").load({ from: { kind: "service" } });
-					s.client("writer").submitOperation({ id: "first", dataStore: "root" });
-					s.sequence().operations("seq-first", "writer", ["first"]);
-					s.client("writer").submitOperation({ id: "second", dataStore: "root" });
-					s.sequence().operations("seq-second", "writer", ["second"]);
-					s.client("joiner").load({
-						from: { kind: "service" },
-						pauseAt: "seq-first",
-					});
-					s.sequence().join("seq-join", "joiner");
-					s.expectClient("joiner").toBe({ connection: "catchingUp" });
-					s.expectOperation("first").at("joiner").toBe("processed");
-					s.expectOperation("second").at("joiner").toBe("sequenced");
-					s.expectDelivery("joiner").toBe({
-						processedThrough: { relation: "equal", position: "seq-first" },
-					});
-				},
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("rejects a leave from a client that still holds its connection", () => {
-			const scenario = scenarioOf("premature leave", sources.container, ["joiner"], (s) => {
-				s.client("joiner").load({ from: { kind: "service" } });
-				s.sequence().join("seq-join", "joiner");
-				s.sequence().leave("seq-leave", "joiner");
-			});
-
-			assertReports(scenario, "still holds its connection");
-		});
-
-		it("rejects a collaboration window that passes a live client's reference position", () => {
-			const scenario = scenarioOf(
-				"window past a live client",
-				sources.loadModes,
-				["writer", "lagging"],
-				(s) => {
-					s.client("writer").load({ from: { kind: "service" } });
-					s.client("lagging").load({ from: { kind: "service" } });
-					s.client("writer").submitOperation({ id: "first", dataStore: "root" });
-					s.sequence().operations("seq-first", "writer", ["first"]);
-					s.service().deliver("writer").through("seq-first");
-					s.client("writer").submitOperation({ id: "second", dataStore: "root" });
-					s.note(
-						"The lagging client never advanced, so the window cannot move past the baseline.",
-					);
-					s.sequence().operations("seq-second", "writer", ["second"], {
-						referenceSequence: "seq-first",
-						minimumSequence: "seq-first",
-					});
-				},
-			);
-
-			assertReports(scenario, "passes the least reference position among live clients");
-		});
-
+	describe("client state and paused loads", () => {
 		it("derives client state instead of trusting the declaration", () => {
 			const scenario = scenarioOf(
 				"contradicted client state",
@@ -1489,155 +1066,49 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			);
 		});
 
-		it("rejects an outcome that the timeline never produced", () => {
+		it("keeps a paused load pinned at the position it declared", () => {
 			const scenario = scenarioOf(
-				"healthy client cannot claim a fork outcome",
-				sources.fork,
-				["alice"],
-				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.expectClient("alice").toBe({ outcome: "forkedContainer" });
-				},
-			);
-
-			assertReports(scenario, "has outcome 'undefined'");
-		});
-	});
-
-	describe("the collaboration window", () => {
-		it("lets a lagging client release the window with a noop", () => {
-			const scenario = scenarioOf(
-				"noop advances a lagging client's reference position",
+				"paused load holds its position",
 				sources.loadModes,
-				["writer", "lagging"],
+				["writer", "pinned"],
 				(s) => {
 					s.client("writer").load({ from: { kind: "service" } });
-					s.client("lagging").load({ from: { kind: "service" } });
 					s.client("writer").submitOperation({ id: "first", dataStore: "root" });
 					s.sequence().operations("seq-first", "writer", ["first"]);
-					s.service().synchronize();
-					s.note(
-						"Both clients have processed the first operation, but the window still sits at the baseline until each of them says so.",
-					);
-					s.sequence().noop("seq-lagging-noop", "lagging");
 					s.client("writer").submitOperation({ id: "second", dataStore: "root" });
-					s.sequence().operations("seq-second", "writer", ["second"], {
-						referenceSequence: "seq-first",
-						minimumSequence: "seq-first",
-					});
+					s.sequence().operations("seq-second", "writer", ["second"]);
+					s.client("pinned").load({ from: { kind: "service" }, pauseAt: "seq-first" });
+					s.service().deliver("pinned").through("seq-first");
+					s.expectOperation("first").at("pinned").toBe("processed");
+					s.note("A blanket synchronize leaves a pinned container where it is.");
 					s.service().synchronize();
-					s.expectConvergence("writer", "lagging");
-					s.expectTrace().toSatisfy();
+					s.expectOperation("second").at("pinned").toBe("sequenced");
+					s.expectDelivery("pinned").toBe({
+						processedThrough: { relation: "equal", position: "seq-first" },
+					});
 				},
 			);
 
 			assert.doesNotThrow(() => assertValidScenario(scenario));
 		});
-	});
 
-	describe("dispatch bunches", () => {
-		it("splits one sequenced message wherever the target DataStore changes", () => {
+		it("rejects delivery past the position a paused load pinned", () => {
 			const scenario = scenarioOf(
-				"bunches inside a grouped batch",
-				sources.bunching,
-				["alice", "bob"],
+				"delivery past a pinned position",
+				sources.loadModes,
+				["writer", "pinned"],
 				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.client("bob").load({ from: { kind: "service" } });
-					s.client("alice").submitBatch({
-						id: "interleaved",
-						operations: [
-							{ id: "root-0", dataStore: "root" },
-							{ id: "root-1", dataStore: "root" },
-							{ id: "second-0", dataStore: "secondary" },
-							{ id: "root-2", dataStore: "root" },
-						],
-					});
-					s.sequence().operations(
-						"seq-interleaved",
-						"alice",
-						["root-0", "root-1", "second-0", "root-2"],
-						{
-							batch: "interleaved",
-							batchPosition: "single",
-							virtualization: { grouped: true },
-						},
-					);
-					s.note(
-						"Returning to a DataStore after leaving it starts a new bunch; bunches are contiguous runs, not per-DataStore totals.",
-					);
-					s.expectBunches("seq-interleaved").toBe([
-						{ dataStore: "root", operations: ["root-0", "root-1"] },
-						{ dataStore: "secondary", operations: ["second-0"] },
-						{ dataStore: "root", operations: ["root-2"] },
-					]);
-					s.service().synchronize();
-					s.expectConvergence("alice", "bob");
-				},
-				twoStoreGroupedDocument,
-			);
-
-			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("rejects a bunch claim that merges non-adjacent operations", () => {
-			const scenario = scenarioOf(
-				"merged bunch claim",
-				sources.bunching,
-				["alice"],
-				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.client("alice").submitBatch({
-						id: "interleaved",
-						operations: [
-							{ id: "root-0", dataStore: "root" },
-							{ id: "second-0", dataStore: "secondary" },
-							{ id: "root-1", dataStore: "root" },
-						],
-					});
-					s.sequence().operations(
-						"seq-interleaved",
-						"alice",
-						["root-0", "second-0", "root-1"],
-						{
-							batch: "interleaved",
-							batchPosition: "single",
-							virtualization: { grouped: true },
-						},
-					);
-					s.expectBunches("seq-interleaved").toBe([
-						{ dataStore: "root", operations: ["root-0", "root-1"] },
-						{ dataStore: "secondary", operations: ["second-0"] },
-					]);
-				},
-				twoStoreGroupedDocument,
-			);
-
-			assertReports(scenario, "dispatches as [rootx1, secondaryx1, rootx1]");
-		});
-
-		it("rejects an ungrouped wire message carrying more than one operation", () => {
-			const scenario = scenarioOf(
-				"ungrouped multi-operation message",
-				sources.bunching,
-				["alice"],
-				(s) => {
-					s.client("alice").load({ from: { kind: "service" } });
-					s.client("alice").submitBatch({
-						id: "plain",
-						operations: [
-							{ id: "root-0", dataStore: "root" },
-							{ id: "root-1", dataStore: "root" },
-						],
-					});
-					s.sequence().operations("seq-plain", "alice", ["root-0", "root-1"], {
-						batch: "plain",
-						batchPosition: "single",
-					});
+					s.client("writer").load({ from: { kind: "service" } });
+					s.client("writer").submitOperation({ id: "first", dataStore: "root" });
+					s.sequence().operations("seq-first", "writer", ["first"]);
+					s.client("writer").submitOperation({ id: "second", dataStore: "root" });
+					s.sequence().operations("seq-second", "writer", ["second"]);
+					s.client("pinned").load({ from: { kind: "service" }, pauseAt: "seq-first" });
+					s.service().deliver("pinned").through("seq-second");
 				},
 			);
 
-			assertReports(scenario, "an ungrouped wire message carries exactly one");
+			assertReports(scenario, "cannot process past its pinned position");
 		});
 	});
 
@@ -1709,6 +1180,30 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 			);
 		});
 
+		it("attaches a detached container in one step", () => {
+			const scenario = fluidScenario("attach in one step")
+				.fromTest(sources.container)
+				.document(document("collaboration", [root]))
+				.clients(interactiveClient("alice"))
+				.covers("container-lifecycle", "op-stream")
+				.steps((s) => {
+					s.client("alice").createDetached();
+					s.expectClient("alice").toBe({ attach: "detached", environment: "none" });
+					s.client("alice").attach();
+					s.expectClient("alice").toBe({
+						attach: "attached",
+						connection: "connected",
+						environment: "service",
+					});
+					s.client("alice").submitOperation({ id: "edit", dataStore: "root" });
+					s.sequence().operations("seq-edit", "alice", ["edit"]);
+					s.service().synchronize();
+					s.expectOperation("edit").at("alice").toBe("acked");
+				});
+
+			assert.doesNotThrow(() => assertValidScenario(scenario));
+		});
+
 		it("preserves attaching provenance through serialization and rehydration", () => {
 			const scenario = fluidScenario("attaching serialization provenance")
 				.fromTest({
@@ -1730,67 +1225,6 @@ describe("Fluid Container Runtime collaboration DSL", () => {
 				});
 
 			assert.doesNotThrow(() => assertValidScenario(scenario));
-		});
-
-		it("rejects frozen loading from ordinary pending-local-state capture", () => {
-			const scenario = fluidScenario("invalid frozen source")
-				.fromTest({
-					file: "packages/test/test-end-to-end-tests/src/test/offline/frozenOfflineRoundTrip.spec.ts",
-					suite: "frozen container offline round-trip",
-					test: "captureFullContainerState → offline writable load → re-capture → online resume",
-				})
-				.document(
-					document("collaboration", [root], {
-						flushMode: "turnBased",
-						enableGroupedBatching: true,
-						enableOfflineFull: true,
-					}),
-				)
-				.clients(interactiveClient("online"), interactiveClient("offline"))
-				.covers("container-load", "pending-state")
-				.steps((s) => {
-					s.client("online").load({ from: { kind: "service" } });
-					s.client("online").capturePendingState("ordinary-pending-state");
-					s.client("offline").load({
-						from: {
-							kind: "pendingState",
-							pendingState: "ordinary-pending-state",
-							mode: "frozen",
-						},
-					});
-				});
-
-			assertReports(scenario, "requires captureFullContainerState output");
-		});
-
-		it("rejects delivery to a frozen container", () => {
-			const scenario = fluidScenario("delivery to a frozen container")
-				.fromTest({
-					file: "packages/test/test-end-to-end-tests/src/test/offline/frozenOfflineRoundTrip.spec.ts",
-					suite: "frozen container offline round-trip",
-					test: "captureFullContainerState → offline writable load → re-capture → online resume",
-				})
-				.document(
-					document("collaboration", [root], {
-						flushMode: "turnBased",
-						enableGroupedBatching: true,
-						enableOfflineFull: true,
-					}),
-				)
-				.clients(interactiveClient("online"), interactiveClient("offline"))
-				.covers("container-load", "op-ordering", "pending-state")
-				.steps((s) => {
-					s.client("online").load({ from: { kind: "service" } });
-					s.service().captureFullContainerState("full-state");
-					s.client("offline").load({
-						from: { kind: "pendingState", pendingState: "full-state", mode: "frozen" },
-					});
-					s.client("online").submitOperation({ id: "edit", dataStore: "root" });
-					s.sequence().operations("seq-edit", "online", ["edit"]);
-					s.service().deliver("offline").through("latest");
-				});
-
-			assertReports(scenario, "loaded frozen and has no live op stream");
 		});
 
 		it("derives saved and stashed op counts from the trace rather than trusting the author", () => {

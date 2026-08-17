@@ -5,17 +5,14 @@
 
 import {
 	type BatchDefinition,
-	type CapturedContainerStateKind,
 	type ClientDefinition,
 	type ConnectionEnvironment,
-	type ContainerOutcome,
 	type ConnectionState,
 	type DataStoreDefinition,
 	type FluidScenario,
 	type LoadOptions,
 	type OperationDeliveryState,
 	type OperationsTraceEntry,
-	type RuntimeConfiguration,
 	type ScenarioCommand,
 	type ScenarioExpectation,
 	type SequenceRef,
@@ -58,22 +55,6 @@ interface ClientValidationState {
 	connectionEpoch: number;
 	lastClientSequence?: number;
 	/**
-	 * Position of this client's join message while it is a live member of the collaboration.
-	 */
-	joinedAt?: number;
-	/**
-	 * The reference position this client currently pins for the collaboration window.
-	 */
-	liveReference: number;
-	connectionMode?: "read" | "write";
-	readOnly?: boolean;
-	outcome?: ContainerOutcome;
-	/**
-	 * Wire batch identities this container is still waiting to have acknowledged. Seeing one of
-	 * them arrive under a different client identity means the session forked.
-	 */
-	readonly pendingBatchIdentities: Set<string>;
-	/**
 	 * Position the container loaded at: its initial sequence number.
 	 */
 	basePosition: number;
@@ -102,7 +83,6 @@ interface ClientValidationState {
 }
 
 interface OperationRecord {
-	readonly id: string;
 	readonly dataStore: string;
 	readonly batch?: string;
 }
@@ -114,7 +94,6 @@ interface BatchRecord {
 	 * Trace positions of every wire message that carried part of this batch.
 	 */
 	readonly entries: number[];
-	submissions: number;
 }
 
 interface SnapshotRecord {
@@ -125,7 +104,6 @@ interface SnapshotRecord {
 }
 
 interface PendingStateRecord {
-	readonly kind: CapturedContainerStateKind;
 	readonly basePosition: number;
 	readonly cursor: number;
 	readonly savedOps: number;
@@ -155,7 +133,6 @@ interface TraceRecord {
 	readonly index: number;
 	readonly path: string;
 	readonly referenceIndex: number;
-	readonly minimumIndex: number;
 	/**
 	 * The submitter's connection epoch, because client sequence numbers restart per connection.
 	 */
@@ -164,11 +141,6 @@ interface TraceRecord {
 	 * The furthest position the submitter could legally have referenced.
 	 */
 	readonly maxReference: number;
-	/**
-	 * The identity a peer would use for duplicate detection.
-	 */
-	readonly effectiveBatchId?: string;
-	readonly explicitBatchId: boolean;
 }
 
 interface ValidationContext {
@@ -185,7 +157,7 @@ interface ValidationContext {
 	readonly operations: Map<string, OperationRecord>;
 	readonly batches: Map<string, BatchRecord>;
 	/**
-	 * Trace position where each operation was first carried by a non-duplicate entry.
+	 * Trace position where each operation entered the total order.
 	 */
 	readonly sequencedOperations: Map<string, number>;
 	/**
@@ -194,11 +166,6 @@ interface ValidationContext {
 	readonly submissionReference: Map<string, number>;
 	readonly trace: TraceRecord[];
 	readonly positions: Map<string, number>;
-	readonly batchIdOwners: Map<string, number>;
-	/**
-	 * Clients whose connection lifecycle this scenario states through protocol join messages.
-	 */
-	readonly joiningClients: ReadonlySet<string>;
 	readonly deliveries: DeliveryAttempt[];
 	/**
 	 * Violations attributed to a named trace invariant and reported when that invariant is
@@ -206,12 +173,6 @@ interface ValidationContext {
 	 */
 	readonly deferred: Map<TraceInvariant, ScenarioValidationIssue[]>;
 	readonly emittedIssues: Set<string>;
-	/**
-	 * Operations that reached a client through pending-state rehydration. Replaying one under a
-	 * new client identity only works if the original batch identity travels with it.
-	 */
-	readonly replayedOperations: Set<string>;
-	usesFullOfflineState: boolean;
 }
 
 export function assertValidScenario(scenario: FluidScenario): void {
@@ -257,13 +218,9 @@ export function validateScenario(scenario: FluidScenario): readonly ScenarioVali
 		submissionReference: new Map(),
 		trace: [],
 		positions: new Map(),
-		batchIdOwners: new Map(),
-		joiningClients: collectJoiningClients(scenario),
 		deliveries: [],
 		deferred: new Map(),
 		emittedIssues: new Set(),
-		replayedOperations: new Set(),
-		usesFullOfflineState: false,
 	};
 
 	validateUnique(
@@ -285,7 +242,6 @@ export function validateScenario(scenario: FluidScenario): readonly ScenarioVali
 	}
 
 	checkTraceInvariants(context, allTraceInvariants, "trace");
-	validateOfflineRequirements(context);
 
 	return issues;
 }
@@ -325,15 +281,6 @@ function validateRuntimeConfiguration(scenario: FluidScenario, addIssue: AddIssu
 		);
 	}
 	if (
-		scenario.document.dataStores.some((dataStore) => dataStore.loadingGroupId !== undefined) &&
-		runtime?.useLoadingGroupIdForSnapshotFetch !== true
-	) {
-		addIssue(
-			"document.runtime.useLoadingGroupIdForSnapshotFetch",
-			"Loading-group DataStores require loading-group snapshot fetching.",
-		);
-	}
-	if (
 		runtime?.compression !== undefined &&
 		(!Number.isFinite(runtime.compression.minimumBatchSizeInBytes) ||
 			runtime.compression.minimumBatchSizeInBytes < 0)
@@ -350,54 +297,6 @@ function validateRuntimeConfiguration(scenario: FluidScenario, addIssue: AddIssu
 		addIssue(
 			"document.runtime.chunkSizeInBytes",
 			"Chunk size must be a finite positive number.",
-		);
-	}
-}
-
-function isBatchIdTrackingEnabled(runtime: RuntimeConfiguration | undefined): boolean {
-	return (
-		(runtime?.flushMode ?? "turnBased") === "turnBased" &&
-		(runtime?.enableGroupedBatching ?? true) &&
-		runtime?.disableBatchIdTracking !== true
-	);
-}
-
-function validateOfflineRequirements(context: ValidationContext): void {
-	if (!context.usesFullOfflineState) {
-		return;
-	}
-	const { addIssue, scenario } = context;
-	const runtime = scenario.document.runtime;
-	if (runtime?.enableOfflineFull !== true) {
-		addIssue(
-			"document.runtime.enableOfflineFull",
-			"Full-state or frozen loading requires offline-full support.",
-		);
-	}
-	if (runtime?.flushMode !== "turnBased") {
-		addIssue(
-			"document.runtime.flushMode",
-			"Writable frozen loading requires turn-based flushing.",
-		);
-	}
-	if (runtime?.enableGroupedBatching !== true) {
-		addIssue(
-			"document.runtime.enableGroupedBatching",
-			"Writable frozen loading requires grouped batching.",
-		);
-	}
-	if (!isBatchIdTrackingEnabled(runtime)) {
-		addIssue(
-			"document.runtime.disableBatchIdTracking",
-			"Writable frozen loading requires batch-id tracking, which needs turn-based flushing, grouped batching, and no disable gate.",
-		);
-	}
-	if (
-		scenario.document.dataStores.some((dataStore) => dataStore.loadingGroupId !== undefined)
-	) {
-		addIssue(
-			"document.dataStores",
-			"Full-state capture does not currently support loading-group DataStores.",
 		);
 	}
 }
@@ -422,12 +321,9 @@ function createClientStates(
 				inbound: "running" as const,
 				outbound: "running" as const,
 				connectionEpoch: 0,
-				readOnly: false,
 				basePosition: 0,
 				cursor: 0,
-				liveReference: 0,
 				pending: [],
-				pendingBatchIdentities: new Set<string>(),
 				applied: new Map<string, number>(),
 				locallyApplied: new Set<string>(),
 			},
@@ -446,9 +342,6 @@ function seedAppliedFromTrace(
 	for (let index = 1; index <= client.cursor; index++) {
 		const record = context.trace[index - 1];
 		if (record?.entry.kind !== "operations") {
-			continue;
-		}
-		if (record.entry.duplicateOf !== undefined) {
 			continue;
 		}
 		for (const operation of record.entry.operations) {
@@ -518,7 +411,7 @@ function validateCommand(
 			const client = requireOpenClient(context, command.client, path);
 			if (client !== undefined) {
 				if (client.attach === "detached") {
-					markAttached(context, client);
+					markAttached(client);
 				} else {
 					addIssue(path, "Attach requires a detached client.");
 				}
@@ -529,7 +422,7 @@ function validateCommand(
 			const client = requireOpenClient(context, command.client, path);
 			if (client !== undefined) {
 				if (client.attach === "attaching") {
-					markAttached(context, client);
+					markAttached(client);
 				} else {
 					addIssue(path, "Completing attach requires an attaching client.");
 				}
@@ -546,7 +439,7 @@ function validateCommand(
 				if (client.attach !== "attached" || client.environment !== "service") {
 					addIssue(path, "Connect requires an attached service-backed client.");
 				} else {
-					beginConnection(context, client);
+					beginConnection(client);
 				}
 			}
 			break;
@@ -567,7 +460,6 @@ function validateCommand(
 			const client = requireOpenClient(context, command.client, path);
 			if (client !== undefined) {
 				client.phase = "closed";
-				client.outcome = "closed";
 				client.connection = "disconnected";
 				client.disconnectedAfter = context.trace.length;
 			}
@@ -590,14 +482,6 @@ function validateCommand(
 				context.visibleDataStores.add(command.dataStore);
 			} else {
 				addIssue(path, `DataStore '${command.dataStore}' has not been created.`);
-			}
-			break;
-		}
-		case "realizeDataStore": {
-			requireOpenClient(context, command.client, path);
-			requireDataStore(context, command.dataStore, path);
-			if (!context.visibleDataStores.has(command.dataStore)) {
-				addIssue(path, `DataStore '${command.dataStore}' is not visible.`);
 			}
 			break;
 		}
@@ -645,60 +529,11 @@ function validateCommand(
 				addIssue(path, "Pending local state capture requires an attached open client.");
 			}
 			recordPendingState(context, command.pendingState, path, {
-				kind: "pendingLocalState",
 				basePosition: client.basePosition,
 				cursor: client.cursor,
 				savedOps: Math.max(0, client.cursor - client.basePosition),
 				stashed: [...client.pending],
 			});
-			break;
-		}
-		case "captureFullContainerState": {
-			context.usesFullOfflineState = true;
-			recordPendingState(context, command.pendingState, path, {
-				kind: "fullContainerState",
-				basePosition: 0,
-				cursor: context.trace.length,
-				savedOps: context.trace.length,
-				stashed: [],
-			});
-			break;
-		}
-		case "requestLatestSnapshotRefresh": {
-			const client = requireOpenClient(context, command.client, path);
-			if (client === undefined) {
-				break;
-			}
-			if (client.environment !== "service") {
-				addIssue(path, "Latest-snapshot refresh requires service-backed storage.");
-				break;
-			}
-			if (command.snapshot === undefined) {
-				break;
-			}
-			const snapshot = context.snapshots.get(command.snapshot);
-			if (snapshot === undefined) {
-				addIssue(
-					path,
-					`Unknown snapshot '${command.snapshot}'. Refresh adopts an existing acknowledged snapshot; it does not produce one.`,
-				);
-				break;
-			}
-			if (snapshot.basePosition > client.cursor) {
-				addIssue(
-					path,
-					`'${command.client}' cannot adopt snapshot '${command.snapshot}' as its base before processing the operations that snapshot already contains.`,
-				);
-				break;
-			}
-			if (client.pending.length > 0) {
-				addIssue(
-					path,
-					`'${command.client}' has unsequenced local operations, so its base snapshot cannot be replaced.`,
-				);
-				break;
-			}
-			client.basePosition = snapshot.basePosition;
 			break;
 		}
 		case "summarize": {
@@ -729,25 +564,6 @@ function validateCommand(
 	}
 }
 
-/**
- * Clients whose connection lifecycle the scenario states through protocol join messages. Only
- * those clients pass through `catchingUp`; everyone else connects in one step.
- */
-function collectJoiningClients(scenario: FluidScenario): ReadonlySet<string> {
-	const joining = new Set<string>();
-	for (const step of scenario.steps) {
-		if (
-			step.kind === "command" &&
-			step.command.kind === "sequence" &&
-			step.command.entry.kind === "join" &&
-			step.command.entry.client !== undefined
-		) {
-			joining.add(step.command.entry.client);
-		}
-	}
-	return joining;
-}
-
 function deferIssue(
 	context: ValidationContext,
 	invariant: TraceInvariant,
@@ -763,22 +579,19 @@ function deferIssue(
 }
 
 /**
- * A client that states its join explicitly is only connected once that join is ordered and
- * processed; otherwise obtaining a connection is a single step.
+ * Obtaining a connection is a single step: the container is connected from that point on, and
+ * its client sequence numbers restart.
  */
-function beginConnection(context: ValidationContext, client: ClientValidationState): void {
-	client.connection = context.joiningClients.has(client.definition.id)
-		? "catchingUp"
-		: "connected";
+function beginConnection(client: ClientValidationState): void {
+	client.connection = "connected";
 	client.connectionEpoch += 1;
-	client.connectionMode = "write";
 	delete client.lastClientSequence;
 }
 
-function markAttached(context: ValidationContext, client: ClientValidationState): void {
+function markAttached(client: ClientValidationState): void {
 	client.attach = "attached";
 	client.environment = "service";
-	beginConnection(context, client);
+	beginConnection(client);
 }
 
 function validateLoad(
@@ -802,42 +615,30 @@ function validateLoad(
 		}
 		client.attach = "attached";
 		client.environment = "service";
-		client.readOnly = false;
 		client.basePosition = snapshot?.basePosition ?? 0;
 		client.cursor = client.basePosition;
 		if (options.deltaConnection !== undefined) {
 			client.connection = "disconnected";
 			client.disconnectedAfter = context.trace.length;
 		} else {
-			beginConnection(context, client);
+			beginConnection(client);
 		}
-		client.connectionMode = options.requestedConnectionMode ?? "write";
-		client.liveReference = client.basePosition;
 		seedAppliedFromTrace(context, client);
 	} else if (source.kind === "pendingState") {
 		const captured = context.pendingStates.get(source.pendingState);
 		if (captured === undefined) {
 			addIssue(path, `Unknown pending state '${source.pendingState}'.`);
 		} else {
-			if (source.mode === "frozen" && captured.kind !== "fullContainerState") {
-				addIssue(path, "Frozen loading requires captureFullContainerState output.");
-			}
 			client.basePosition = captured.basePosition;
 			client.cursor = captured.cursor;
 			client.pending = [...captured.stashed];
 			for (const operation of captured.stashed) {
 				context.submissionReference.set(operation, captured.cursor);
-				context.replayedOperations.add(operation);
 			}
 		}
-		if (source.mode === "frozen") {
-			context.usesFullOfflineState = true;
-		}
 		client.attach = "attached";
-		client.environment = source.mode === "frozen" ? "frozen" : "service";
-		beginConnection(context, client);
-		client.readOnly = source.readOnly ?? false;
-		client.liveReference = client.cursor;
+		client.environment = "service";
+		beginConnection(client);
 		seedAppliedFromTrace(context, client);
 		for (const operation of client.pending) {
 			applyLocally(client, operation);
@@ -850,7 +651,6 @@ function validateLoad(
 		client.attach = serializedAttachState === "attaching" ? "attached" : "detached";
 		client.connection = "disconnected";
 		client.environment = serializedAttachState === "attaching" ? "service" : "none";
-		client.readOnly = false;
 	}
 	if (options.pauseAt !== undefined) {
 		const pinned = resolvePosition(context, options.pauseAt, path, "pause position");
@@ -893,7 +693,6 @@ function validateSubmission(
 			id: command.batch.id,
 			definition: command.batch,
 			entries: [],
-			submissions: 1,
 		});
 		for (const operation of command.batch.operations) {
 			declareOperation(context, client, operation, command.batch.id, path);
@@ -906,20 +705,10 @@ function validateSubmission(
 		addIssue(path, `Unknown batch '${command.batch}'. Only a declared batch can be replayed.`);
 		return;
 	}
-	batch.submissions += 1;
 	if (client === undefined) {
 		return;
 	}
-	if (command.batchId !== undefined) {
-		client.pendingBatchIdentities.add(command.batchId);
-	}
 	for (const operation of batch.definition.operations) {
-		if (context.sequencedOperations.has(operation.id) && command.batchId === undefined) {
-			addIssue(
-				path,
-				`Batch '${command.batch}' was already sequenced; a replay must carry the original batch identity so a peer can reject the repeat.`,
-			);
-		}
 		if (!client.pending.includes(operation.id)) {
 			client.pending.push(operation.id);
 		}
@@ -948,7 +737,6 @@ function declareOperation(
 		return;
 	}
 	context.operations.set(operation.id, {
-		id: operation.id,
 		dataStore: operation.dataStore,
 		...(batch === undefined ? {} : { batch }),
 	});
@@ -991,9 +779,7 @@ function validateSequenceEntry(
 	const submitter =
 		entry.kind === "summaryAck" || entry.kind === "summaryNack" ? undefined : entry.client;
 
-	if (submitter !== undefined && (entry.kind === "operations" || entry.kind === "summarize")) {
-		// Protocol messages have their own preconditions: a join is ordered while the client is
-		// still catching up, and a leave is ordered after it lost its connection.
+	if (submitter !== undefined) {
 		requireSequencingClient(context, submitter, path);
 	}
 
@@ -1021,41 +807,7 @@ function validateSequenceEntry(
 		);
 	}
 
-	const previousMinimum = context.trace[context.trace.length - 1]?.minimumIndex ?? 0;
-	const minimumIndex =
-		entry.minimumSequence === undefined
-			? previousMinimum
-			: (resolvePosition(context, entry.minimumSequence, path, "minimum sequence") ??
-				previousMinimum);
-	if (minimumIndex < previousMinimum) {
-		deferIssue(
-			context,
-			"minimumSequenceMonotonic",
-			path,
-			`Minimum sequence number moved backwards at '${entry.at}'.`,
-		);
-	}
-	if (minimumIndex > referenceIndex) {
-		deferIssue(
-			context,
-			"minimumSequenceMonotonic",
-			path,
-			`Minimum sequence number at '${entry.at}' passes the reference sequence number of a live submitter.`,
-		);
-	}
 	const submitterState = submitter === undefined ? undefined : context.clients.get(submitter);
-	if (submitterState !== undefined && entry.kind !== "leave") {
-		submitterState.liveReference = referenceIndex;
-	}
-	const liveFloor = leastLiveReference(context);
-	if (liveFloor !== undefined && minimumIndex > liveFloor) {
-		deferIssue(
-			context,
-			"minimumSequenceMonotonic",
-			path,
-			`Minimum sequence number at '${entry.at}' passes the least reference position among live clients.`,
-		);
-	}
 
 	if (submitterState !== undefined && entry.clientSequence !== undefined) {
 		if (
@@ -1072,34 +824,17 @@ function validateSequenceEntry(
 		submitterState.lastClientSequence = entry.clientSequence;
 	}
 
-	let effectiveBatchId: string | undefined;
-	let explicitBatchId = false;
 	switch (entry.kind) {
 		case "operations": {
-			const identity = validateOperationsEntry(context, entry, index, path);
-			effectiveBatchId = identity.effectiveBatchId;
-			explicitBatchId = identity.explicit;
+			validateOperationsEntry(context, entry, index, path);
 			break;
 		}
 		case "summarize": {
 			validateSummarizeEntry(context, entry.summary, entry.client, index, path);
 			break;
 		}
-		case "summaryAck":
-		case "summaryNack": {
-			validateSummaryOutcomeEntry(context, entry, path);
-			break;
-		}
-		case "join": {
-			validateJoinEntry(context, entry.client, index, path);
-			break;
-		}
-		case "leave": {
-			validateLeaveEntry(context, entry.client, path);
-			break;
-		}
 		default: {
-			// A noop may be service-generated, so it needs no client.
+			validateSummaryOutcomeEntry(context, entry, path);
 			break;
 		}
 	}
@@ -1110,11 +845,8 @@ function validateSequenceEntry(
 		index,
 		path,
 		referenceIndex,
-		minimumIndex,
 		epoch: submitterState?.connectionEpoch ?? 0,
 		maxReference: defaultReference,
-		explicitBatchId,
-		...(effectiveBatchId === undefined ? {} : { effectiveBatchId }),
 	});
 }
 
@@ -1151,7 +883,7 @@ function validateOperationsEntry(
 	entry: OperationsTraceEntry,
 	index: number,
 	path: string,
-): { readonly effectiveBatchId: string | undefined; readonly explicit: boolean } {
+): void {
 	const { addIssue } = context;
 	const runtime = context.scenario.document.runtime;
 	const chunk = entry.virtualization?.chunk;
@@ -1208,20 +940,11 @@ function validateOperationsEntry(
 	}
 	batch?.entries.push(index);
 
-	const duplicate = validateDuplicateReference(context, entry, path);
 	const client = context.clients.get(entry.client);
 
 	for (const operation of entry.operations) {
 		if (!context.operations.has(operation)) {
 			addIssue(path, `Unknown operation '${operation}'.`);
-			continue;
-		}
-		if (duplicate) {
-			// The replay was answered by rejection, so it no longer awaits an acknowledgement.
-			const outstanding = client?.pending.indexOf(operation) ?? -1;
-			if (client !== undefined && outstanding !== -1) {
-				client.pending.splice(outstanding, 1);
-			}
 			continue;
 		}
 		if (client !== undefined) {
@@ -1240,211 +963,11 @@ function validateOperationsEntry(
 				context,
 				"exactlyOnceApplication",
 				path,
-				`Operation '${operation}' is already sequenced. A repeat must be marked as a duplicate of the earlier entry.`,
+				`Operation '${operation}' is already sequenced; a logical operation occupies exactly one position in the total order.`,
 			);
 		} else {
 			context.sequencedOperations.set(operation, index);
 		}
-	}
-
-	const explicit = entry.batchId !== undefined;
-	const derived =
-		entry.clientSequence === undefined
-			? undefined
-			: `${entry.client}_[${entry.clientSequence}]`;
-	const effectiveBatchId = entry.batchId ?? derived;
-	const trackingEnabled = isBatchIdTrackingEnabled(context.scenario.document.runtime);
-	if (explicit && !trackingEnabled) {
-		addIssue(path, "An explicit batch identity requires batch-id tracking.");
-	}
-	if (
-		!explicit &&
-		trackingEnabled &&
-		!duplicate &&
-		entry.operations.some((operation) => context.replayedOperations.has(operation))
-	) {
-		deferIssue(
-			context,
-			"exactlyOnceApplication",
-			path,
-			`'${entry.at}' replays operations rehydrated from captured pending state under a new client identity, so it must carry the original batch id.`,
-		);
-	}
-	if (effectiveBatchId !== undefined && !duplicate) {
-		const owner = context.batchIdOwners.get(effectiveBatchId);
-		if (owner !== undefined) {
-			deferIssue(
-				context,
-				"exactlyOnceApplication",
-				path,
-				`Batch identity '${effectiveBatchId}' was already sequenced; '${entry.at}' must declare itself a duplicate of that entry.`,
-			);
-		} else {
-			context.batchIdOwners.set(effectiveBatchId, index);
-		}
-		client?.pendingBatchIdentities.delete(effectiveBatchId);
-	}
-
-	return { effectiveBatchId, explicit };
-}
-
-function validateDuplicateReference(
-	context: ValidationContext,
-	entry: OperationsTraceEntry,
-	path: string,
-): boolean {
-	if (entry.duplicateOf === undefined) {
-		return false;
-	}
-	const { addIssue } = context;
-	const originalIndex = context.positions.get(entry.duplicateOf);
-	if (originalIndex === undefined) {
-		addIssue(path, `Unknown sequence position '${entry.duplicateOf}'.`);
-		return true;
-	}
-	const original = context.trace[originalIndex - 1];
-	if (original?.entry.kind !== "operations") {
-		addIssue(path, `'${entry.duplicateOf}' does not carry operations.`);
-		return true;
-	}
-	const originalOperations = new Set(original.entry.operations);
-	if (
-		entry.operations.length !== original.entry.operations.length ||
-		entry.operations.some((operation) => !originalOperations.has(operation))
-	) {
-		addIssue(
-			path,
-			`'${entry.at}' claims to duplicate '${entry.duplicateOf}' but carries different logical operations.`,
-		);
-	}
-	const replayIdentity =
-		entry.batchId ??
-		(entry.clientSequence === undefined
-			? undefined
-			: `${entry.client}_[${entry.clientSequence}]`);
-	if (replayIdentity === undefined || replayIdentity !== original.effectiveBatchId) {
-		deferIssue(
-			context,
-			"exactlyOnceApplication",
-			path,
-			`Duplicate detection requires '${entry.at}' to carry the batch identity of '${entry.duplicateOf}'; a replay under a new client identity must preserve the original batch id.`,
-		);
-	} else if (!original.explicitBatchId && entry.batchId === undefined) {
-		deferIssue(
-			context,
-			"exactlyOnceApplication",
-			path,
-			`Neither '${entry.duplicateOf}' nor '${entry.at}' carries an explicit batch id, so a peer could not reject the repeat.`,
-		);
-	}
-	return true;
-}
-
-/**
- * The least reference position pinned by a live write client. The collaboration window cannot
- * pass it, because that client may still rebase against everything after it.
- */
-function leastLiveReference(context: ValidationContext): number | undefined {
-	let least: number | undefined;
-	for (const client of context.clients.values()) {
-		if (client.phase !== "open" || client.environment !== "service") {
-			continue;
-		}
-		if (client.connectionMode === "read") {
-			continue;
-		}
-		const connectedWriter =
-			client.connection === "connected" || client.connection === "catchingUp";
-		if (!connectedWriter && client.joinedAt === undefined) {
-			continue;
-		}
-		least = least === undefined ? client.liveReference : Math.min(least, client.liveReference);
-	}
-	return least;
-}
-
-function validateJoinEntry(
-	context: ValidationContext,
-	clientId: string | undefined,
-	index: number,
-	path: string,
-): void {
-	if (clientId === undefined) {
-		context.addIssue(path, "A 'join' entry must name the client that is joining.");
-		return;
-	}
-	const client = requireOpenClient(context, clientId, path);
-	if (client === undefined) {
-		return;
-	}
-	if (client.attach !== "attached" || client.environment !== "service") {
-		context.addIssue(
-			path,
-			`'${clientId}' is not attached to a service-backed document, so it cannot join.`,
-		);
-		return;
-	}
-	if (client.joinedAt !== undefined) {
-		context.addIssue(
-			path,
-			`'${clientId}' has a previous membership that no leave message has retired; a reconnecting client waits for its own leave before it is live again.`,
-		);
-		return;
-	}
-	if (client.connection !== "catchingUp") {
-		context.addIssue(
-			path,
-			`'${clientId}' is not establishing a connection, so its join cannot be sequenced.`,
-		);
-		return;
-	}
-	client.joinedAt = index;
-	if (client.inbound === "running") {
-		// Catching up means processing everything ordered before the join point.
-		applyThrough(client, context, Math.min(index, client.pinnedAt ?? index));
-	}
-	client.liveReference = client.cursor;
-	refreshConnectionState(client);
-}
-
-function validateLeaveEntry(
-	context: ValidationContext,
-	clientId: string | undefined,
-	path: string,
-): void {
-	if (clientId === undefined) {
-		context.addIssue(path, "A 'leave' entry must name the client that is leaving.");
-		return;
-	}
-	const client = context.clients.get(clientId);
-	if (client === undefined) {
-		context.addIssue(path, `Unknown client '${clientId}'.`);
-		return;
-	}
-	if (client.joinedAt === undefined) {
-		context.addIssue(path, `'${clientId}' is not a live member, so it cannot leave.`);
-		return;
-	}
-	if (client.connection === "connected") {
-		context.addIssue(
-			path,
-			`'${clientId}' still holds its connection; a leave message follows the loss of that connection.`,
-		);
-		return;
-	}
-	delete client.joinedAt;
-}
-
-/**
- * A catching-up client becomes connected once it has processed its own join message.
- */
-function refreshConnectionState(client: ClientValidationState): void {
-	if (
-		client.connection === "catchingUp" &&
-		client.joinedAt !== undefined &&
-		client.cursor >= client.joinedAt
-	) {
-		client.connection = "connected";
 	}
 }
 
@@ -1543,10 +1066,7 @@ function deliverTo(
 
 function deliveryRejection(client: ClientValidationState, target: number): string | undefined {
 	const id = client.definition.id;
-	if (client.environment === "frozen") {
-		return `'${id}' is loaded frozen and has no live op stream to deliver.`;
-	}
-	if (client.connection !== "connected" && client.connection !== "catchingUp") {
+	if (client.connection !== "connected") {
 		return `'${id}' is not connected and cannot process sequenced messages.`;
 	}
 	if (client.inbound === "paused") {
@@ -1571,23 +1091,6 @@ function applyThrough(
 		if (record?.entry.kind !== "operations") {
 			continue;
 		}
-		if (
-			record.entry.client !== client.definition.id &&
-			record.effectiveBatchId !== undefined &&
-			client.pendingBatchIdentities.has(record.effectiveBatchId)
-		) {
-			// The same logical batch exists under another client identity. The container closes
-			// before applying it, which is what keeps the operation applied exactly once.
-			client.cursor = index - 1;
-			client.phase = "closed";
-			client.outcome = "forkedContainer";
-			client.connection = "disconnected";
-			client.disconnectedAfter = context.trace.length;
-			return;
-		}
-		if (record.entry.duplicateOf !== undefined) {
-			continue;
-		}
 		const ownSubmission = record.entry.client === client.definition.id;
 		for (const operation of record.entry.operations) {
 			if (ownSubmission && client.locallyApplied.has(operation)) {
@@ -1599,7 +1102,6 @@ function applyThrough(
 		}
 	}
 	client.cursor = target;
-	refreshConnectionState(client);
 }
 
 function validateSynchronize(
@@ -1665,10 +1167,6 @@ function validateExpectation(
 			validateBatchVirtualizationExpectation(context, expectation, path);
 			break;
 		}
-		case "operationBunches": {
-			validateOperationBunchExpectation(context, expectation, path);
-			break;
-		}
 		case "pendingReplay": {
 			validatePendingReplayExpectation(context, expectation, path);
 			break;
@@ -1719,21 +1217,6 @@ function validateExpectation(
 						`'${expectation.client}' has not processed operation '${operation}'.`,
 					);
 				}
-			}
-			break;
-		}
-		case "snapshotFetch": {
-			requireKnownClient(context, expectation.client, path);
-			if (expectation.snapshot !== undefined && !context.snapshots.has(expectation.snapshot)) {
-				addIssue(path, `Unknown snapshot '${expectation.snapshot}'.`);
-			}
-			if (
-				expectation.loadingGroupId !== undefined &&
-				![...context.dataStores.values()].some(
-					(dataStore) => dataStore.loadingGroupId === expectation.loadingGroupId,
-				)
-			) {
-				addIssue(path, `Unknown loading group '${expectation.loadingGroupId}'.`);
 			}
 			break;
 		}
@@ -1889,14 +1372,9 @@ function validatePendingReplayExpectation(
 ): void {
 	const { addIssue } = context;
 	const client = requireKnownClient(context, expectation.client, path);
-	for (const batch of [...expectation.batches, ...(expectation.rebasedBatches ?? [])]) {
+	for (const batch of expectation.batches) {
 		if (!context.batches.has(batch)) {
 			addIssue(path, `Unknown batch '${batch}'.`);
-		}
-	}
-	for (const batch of expectation.rebasedBatches ?? []) {
-		if (!expectation.batches.includes(batch)) {
-			addIssue(path, `Rebased batch '${batch}' is not part of the replayed sequence.`);
 		}
 	}
 	if (client === undefined) {
@@ -1942,12 +1420,9 @@ function validateClientStateExpectation(
 	const actual = {
 		attach: client.attach,
 		connection: client.connection,
-		connectionMode: client.connectionMode,
-		readonly: client.readOnly,
 		environment: client.environment,
 		dirty: client.pending.length > 0 ? ("dirty" as const) : ("saved" as const),
 		closed: client.phase === "closed",
-		outcome: client.outcome,
 		inbound: client.inbound,
 		outbound: client.outbound,
 	};
@@ -1965,61 +1440,6 @@ function validateClientStateExpectation(
 	}
 }
 
-/**
- * A new bunch begins whenever the target DataStore changes inside one sequenced message.
- */
-function validateOperationBunchExpectation(
-	context: ValidationContext,
-	expectation: Extract<ScenarioExpectation, { kind: "operationBunches" }>,
-	path: string,
-): void {
-	const { addIssue } = context;
-	const index = resolvePosition(context, expectation.at, path, "position");
-	if (index === undefined) {
-		return;
-	}
-	const record = context.trace[index - 1];
-	if (record?.entry.kind !== "operations") {
-		addIssue(path, `'${expectation.at}' does not carry operations.`);
-		return;
-	}
-	const actual: { dataStore: string; operations: string[] }[] = [];
-	for (const operation of record.entry.operations) {
-		const dataStore = context.operations.get(operation)?.dataStore;
-		if (dataStore === undefined) {
-			addIssue(path, `Unknown operation '${operation}'.`);
-			return;
-		}
-		const current = actual[actual.length - 1];
-		if (current?.dataStore === dataStore) {
-			current.operations.push(operation);
-		} else {
-			actual.push({ dataStore, operations: [operation] });
-		}
-	}
-	const describe = (
-		bunches: readonly { dataStore: string; operations: readonly string[] }[],
-	) => bunches.map((bunch) => `${bunch.dataStore}x${bunch.operations.length}`).join(", ");
-	const matches =
-		actual.length === expectation.bunches.length &&
-		actual.every((bunch, position) => {
-			const expected = expectation.bunches[position];
-			return (
-				expected?.dataStore === bunch.dataStore &&
-				expected.operations.length === bunch.operations.length &&
-				expected.operations.every(
-					(operation, offset) => operation === bunch.operations[offset],
-				)
-			);
-		});
-	if (!matches) {
-		addIssue(
-			path,
-			`'${expectation.at}' dispatches as [${describe(actual)}], not [${describe(expectation.bunches)}].`,
-		);
-	}
-}
-
 function validateBatchVirtualizationExpectation(
 	context: ValidationContext,
 	expectation: Extract<ScenarioExpectation, { kind: "batchVirtualization" }>,
@@ -2033,10 +1453,7 @@ function validateBatchVirtualizationExpectation(
 	}
 	const records = batch.entries
 		.map((index) => context.trace[index - 1])
-		.filter(
-			(record): record is TraceRecord =>
-				record?.entry.kind === "operations" && record.entry.duplicateOf === undefined,
-		);
+		.filter((record): record is TraceRecord => record?.entry.kind === "operations");
 	if (records.length === 0) {
 		addIssue(
 			path,
@@ -2101,18 +1518,6 @@ function validatePendingStateExpectation(
 	if (record === undefined) {
 		addIssue(path, `Unknown pending state '${expectation.pendingState}'.`);
 		return;
-	}
-	if (expectation.captureKind !== undefined && expectation.captureKind !== record.kind) {
-		addIssue(
-			path,
-			`'${expectation.pendingState}' was produced by ${record.kind} capture, not ${expectation.captureKind}.`,
-		);
-	}
-	if (expectation.selfContained === true && record.kind !== "fullContainerState") {
-		addIssue(
-			path,
-			`Only full-container capture is self-contained; '${expectation.pendingState}' is not.`,
-		);
 	}
 	if (expectation.savedOps !== undefined && expectation.savedOps !== record.savedOps) {
 		addIssue(
@@ -2276,10 +1681,6 @@ function checkTraceInvariants(
 				checkCausalReferenceSequence(context, emit);
 				break;
 			}
-			case "minimumSequenceMonotonic": {
-				checkMinimumSequenceMonotonic(context, emit);
-				break;
-			}
 			case "wireReconstruction": {
 				checkWireReconstruction(context, emit, path);
 				break;
@@ -2347,25 +1748,6 @@ function checkCausalReferenceSequence(context: ValidationContext, addIssue: AddI
 				`Reference sequence for '${record.entry.at}' is ahead of what its submitter had processed.`,
 			);
 		}
-	}
-}
-
-function checkMinimumSequenceMonotonic(context: ValidationContext, addIssue: AddIssue): void {
-	let previous = 0;
-	for (const record of context.trace) {
-		if (record.minimumIndex < previous) {
-			addIssue(
-				record.path,
-				`Minimum sequence number moved backwards at '${record.entry.at}'.`,
-			);
-		}
-		if (record.minimumIndex > record.referenceIndex) {
-			addIssue(
-				record.path,
-				`Minimum sequence number at '${record.entry.at}' passes the reference sequence number of a live submitter.`,
-			);
-		}
-		previous = Math.max(previous, record.minimumIndex);
 	}
 }
 
@@ -2457,7 +1839,7 @@ function checkBatchContiguity(
 }
 
 function checkBatchMarkers(
-	batchId: string,
+	batchName: string,
 	records: readonly TraceRecord[],
 	addIssue: AddIssue,
 	path: string,
@@ -2480,7 +1862,7 @@ function checkBatchMarkers(
 		if (positions[0] !== "single") {
 			addIssue(
 				path,
-				`Batch '${batchId}' occupies one wire message and must be marked 'single'.`,
+				`Batch '${batchName}' occupies one wire message and must be marked 'single'.`,
 			);
 		}
 		return;
@@ -2491,7 +1873,7 @@ function checkBatchMarkers(
 		if (position !== expected) {
 			addIssue(
 				path,
-				`Batch '${batchId}' wire message ${index + 1} should be marked '${expected}'.`,
+				`Batch '${batchName}' wire message ${index + 1} should be marked '${expected}'.`,
 			);
 		}
 	}
@@ -2687,13 +2069,6 @@ function requireSequencingClient(
 		context.addIssue(
 			path,
 			`'${clientId}' is disconnected, so nothing it submitted can be sequenced until it reconnects and resubmits.`,
-		);
-		return;
-	}
-	if (client.connectionMode === "read") {
-		context.addIssue(
-			path,
-			`'${clientId}' is connected in read mode, so its pending submissions cannot be sequenced until it transitions to write mode.`,
 		);
 		return;
 	}

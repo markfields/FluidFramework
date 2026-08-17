@@ -9,24 +9,14 @@
  */
 export const fluidScenarioFormatVersion = 2 as const;
 
+//* CPLT can we import these consts from FF packages?
 export type ClientRole = "interactive" | "summarizer";
 export type FlushMode = "turnBased" | "immediate";
 export type ProcessingQueue = "inbound" | "outbound";
 export type AttachState = "detached" | "attaching" | "attached";
-/**
- * A client is `catchingUp` from the moment it obtains a connection until it has processed its
- * own join message. Scenarios that never declare `join` entries move straight to `connected`.
- */
-export type ConnectionState = "disconnected" | "catchingUp" | "connected";
-export type ConnectionEnvironment = "none" | "service" | "frozen";
+export type ConnectionState = "disconnected" | "connected";
+export type ConnectionEnvironment = "none" | "service";
 export type DirtyState = "dirty" | "saved";
-
-/**
- * Why a container is no longer usable. `forkedContainer` is what a container reports when it
- * sees its own pending batch arrive under a different client identity: the same logical work
- * exists twice, so it closes rather than apply it a second time.
- */
-export type ContainerOutcome = "closed" | "forkedContainer";
 
 /**
  * A logical operation's status relative to one client.
@@ -46,24 +36,19 @@ export type OperationDeliveryState =
 	| "acked"
 	| "notProcessed";
 export type SummaryState = "local" | "broadcast" | "acked" | "nacked";
-export type SummaryStage = "base" | "generate" | "upload" | "submit";
-export type SummaryObjectForm = "tree" | "handle" | "omitted";
-export type CapturedContainerStateKind = "pendingLocalState" | "fullContainerState";
+export type SummaryObjectForm = "tree" | "handle";
 export type DataStoreRealizationState = "unloaded" | "loaded";
-export type SnapshotFetchPurpose = "initialLoad" | "summaryAck" | "refresh" | "loadingGroup";
 
 export type ScenarioCoverage =
 	| "container-lifecycle"
 	| "container-load"
-	| "driver-contracts"
 	| "op-stream"
 	| "op-ordering"
 	| "op-virtualization"
 	| "pending-state"
 	| "replay"
 	| "snapshot"
-	| "summarization"
-	| "data-virtualization";
+	| "summarization";
 
 export interface ScenarioSource {
 	readonly file: string;
@@ -80,7 +65,6 @@ export interface ClientDefinition<Name extends string = string> {
 export interface DataStoreDefinition {
 	readonly id: string;
 	readonly root?: boolean;
-	readonly loadingGroupId?: string;
 	/**
 	 * False means the scenario must create and make the DataStore visible before use.
 	 */
@@ -97,19 +81,6 @@ export interface RuntimeConfiguration {
 	readonly enableGroupedBatching?: boolean;
 	readonly compression?: CompressionConfiguration;
 	readonly chunkSizeInBytes?: number;
-	/**
-	 * Mirrors the `Fluid.ContainerRuntime.DisableBatchIdTracking` feature gate. Tracking is
-	 * otherwise derived from turn-based flushing and grouped batching, as it is in the runtime.
-	 */
-	readonly disableBatchIdTracking?: boolean;
-	/**
-	 * Mirrors the `Fluid.Container.enableOfflineFull` feature gate.
-	 */
-	readonly enableOfflineFull?: boolean;
-	/**
-	 * Mirrors the `Fluid.Container.UseLoadingGroupIdForSnapshotFetch2` feature gate.
-	 */
-	readonly useLoadingGroupIdForSnapshotFetch?: boolean;
 }
 
 export interface DocumentDefinition {
@@ -131,8 +102,6 @@ export interface DataStoreOperation {
 export interface BatchDefinition {
 	readonly id: string;
 	readonly operations: readonly DataStoreOperation[];
-	readonly flushMode?: FlushMode;
-	readonly reentrant?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,10 +161,6 @@ interface TraceEntryBase {
 	 * submitter's cursor at submission time.
 	 */
 	readonly referenceSequence?: SequenceRef;
-	/**
-	 * The collaboration-window floor carried by this message.
-	 */
-	readonly minimumSequence?: SequenceRef;
 }
 
 export interface OperationsTraceEntry extends TraceEntryBase {
@@ -206,33 +171,8 @@ export interface OperationsTraceEntry extends TraceEntryBase {
 	 */
 	readonly operations: readonly string[];
 	readonly batch?: string;
-	/**
-	 * Explicit wire batch identity. Absent means the runtime would derive one from the
-	 * submitting client and the batch's first client sequence number.
-	 */
-	readonly batchId?: string;
 	readonly batchPosition?: BatchPosition;
 	readonly virtualization?: WireVirtualization;
-	/**
-	 * Names an earlier entry whose batch identity this entry repeats. Duplicate entries are
-	 * detected and discarded, so they apply no logical operation.
-	 */
-	readonly duplicateOf?: string;
-}
-
-export interface ProtocolTraceEntry extends TraceEntryBase {
-	/**
-	 * `join` marks the point where a connecting client becomes a live member: it has processed
-	 * everything ordered before that position, and only from there can its own submissions be
-	 * sequenced. `leave` retires a disconnected client from the live set, which is what lets the
-	 * collaboration window advance past its reference position. `noop` moves a live client's
-	 * reference position forward without carrying an operation.
-	 */
-	readonly kind: "join" | "leave" | "noop";
-	/**
-	 * Absent for a service-generated message.
-	 */
-	readonly client?: string;
 }
 
 export interface SummarizeTraceEntry extends TraceEntryBase {
@@ -255,7 +195,6 @@ export interface SummaryNackTraceEntry extends TraceEntryBase {
 
 export type TraceEntry =
 	| OperationsTraceEntry
-	| ProtocolTraceEntry
 	| SummarizeTraceEntry
 	| SummaryAckTraceEntry
 	| SummaryNackTraceEntry;
@@ -272,8 +211,6 @@ export interface ServiceLoadSource {
 export interface PendingStateLoadSource {
 	readonly kind: "pendingState";
 	readonly pendingState: string;
-	readonly mode: "online" | "frozen";
-	readonly readOnly?: boolean;
 }
 
 export interface SerializedContainerLoadSource {
@@ -289,7 +226,6 @@ export type LoadSource =
 export interface LoadOptions {
 	readonly from: LoadSource;
 	readonly deltaConnection?: "none" | "delayed";
-	readonly requestedConnectionMode?: "read" | "write";
 	/**
 	 * Pins the container's processing cursor. Delivery past this position is rejected.
 	 */
@@ -359,12 +295,6 @@ export interface MakeDataStoreVisibleCommand {
 	readonly dataStore: string;
 }
 
-export interface RealizeDataStoreCommand {
-	readonly kind: "realizeDataStore";
-	readonly client: string;
-	readonly dataStore: string;
-}
-
 /**
  * Offers a logical operation to the runtime. Submission does not place it in the total
  * order; only a matching {@link SequenceCommand} does.
@@ -389,11 +319,6 @@ export interface ResubmitBatchCommand {
 	readonly kind: "resubmitBatch";
 	readonly client: string;
 	readonly batch: string;
-	/**
-	 * Wire batch identity carried by the replay. Preserving the original identity is what
-	 * lets a peer discard a second copy.
-	 */
-	readonly batchId?: string;
 }
 
 export type SubmissionCommand =
@@ -454,17 +379,6 @@ export interface CapturePendingStateCommand {
 	readonly pendingState: string;
 }
 
-export interface CaptureFullContainerStateCommand {
-	readonly kind: "captureFullContainerState";
-	readonly pendingState: string;
-}
-
-export interface RequestLatestSnapshotRefreshCommand {
-	readonly kind: "requestLatestSnapshotRefresh";
-	readonly client: string;
-	readonly snapshot?: string;
-}
-
 /**
  * Generates and uploads a summary and submits the summary op. The op only enters the total
  * order when a matching `summarize` trace entry is declared.
@@ -473,8 +387,6 @@ export interface SummarizeCommand {
 	readonly kind: "summarize";
 	readonly client: string;
 	readonly summary: string;
-	readonly fullTree?: boolean;
-	readonly trackState?: boolean;
 }
 
 export type ScenarioCommand =
@@ -489,7 +401,6 @@ export type ScenarioCommand =
 	| CloseCommand
 	| CreateDataStoreCommand
 	| MakeDataStoreVisibleCommand
-	| RealizeDataStoreCommand
 	| SubmitOperationCommand
 	| SubmitBatchCommand
 	| ResubmitBatchCommand
@@ -500,8 +411,6 @@ export type ScenarioCommand =
 	| PauseProcessingCommand
 	| ResumeProcessingCommand
 	| CapturePendingStateCommand
-	| CaptureFullContainerStateCommand
-	| RequestLatestSnapshotRefreshCommand
 	| SummarizeCommand;
 
 // ---------------------------------------------------------------------------
@@ -514,12 +423,9 @@ export interface ClientStateExpectation {
 	readonly state: {
 		readonly attach?: AttachState;
 		readonly connection?: ConnectionState;
-		readonly connectionMode?: "read" | "write";
-		readonly readonly?: boolean;
 		readonly environment?: ConnectionEnvironment;
 		readonly dirty?: DirtyState;
 		readonly closed?: boolean;
-		readonly outcome?: ContainerOutcome;
 		readonly inbound?: "running" | "paused";
 		readonly outbound?: "running" | "paused";
 	};
@@ -558,31 +464,25 @@ export interface BatchVirtualizationExpectation {
 
 /**
  * The batches one client still has outstanding, in the order its runtime will replay them.
- * `rebasedBatches` records intent that the trace cannot show, because rebasing happens before
- * anything reaches the total order.
  */
 export interface PendingReplayExpectation {
 	readonly kind: "pendingReplay";
 	readonly client: string;
 	readonly batches: readonly string[];
-	readonly rebasedBatches?: readonly string[];
 }
 
 export interface PendingStateExpectation {
 	readonly kind: "pendingState";
 	readonly pendingState: string;
-	readonly captureKind?: CapturedContainerStateKind;
 	readonly savedOps?: number;
 	readonly stashedOps?: number;
 	readonly containsOperations?: readonly string[];
-	readonly selfContained?: boolean;
 }
 
 export interface SummaryExpectation {
 	readonly kind: "summary";
 	readonly summary: string;
 	readonly state: SummaryState;
-	readonly stage?: SummaryStage;
 	readonly dataStores?: Readonly<Record<string, SummaryObjectForm>>;
 }
 
@@ -592,15 +492,6 @@ export interface DataStoreExpectation {
 	readonly dataStore: string;
 	readonly realization: DataStoreRealizationState;
 	readonly containsOperations?: readonly string[];
-}
-
-export interface SnapshotFetchExpectation {
-	readonly kind: "snapshotFetch";
-	readonly client: string;
-	readonly purpose: SnapshotFetchPurpose;
-	readonly count: number;
-	readonly loadingGroupId?: string;
-	readonly snapshot?: string;
 }
 
 export interface SequenceRelation {
@@ -649,15 +540,11 @@ export interface ConvergenceExpectation {
  * `causalReferenceSequence`: a message's reference sequence number is a position its submitter
  * had already processed, and precedes the message's own position.
  *
- * `minimumSequenceMonotonic`: the collaboration-window floor never moves backwards and never
- * passes a live submitter's reference sequence number. When the scenario declares protocol
- * joins and leaves, it also never passes the least reference position among live clients.
- *
  * `wireReconstruction`: chunked payloads are either fully reconstructed or abandoned by a
  * submitter that lost its connection.
  *
- * `exactlyOnceApplication`: no client applies the same logical operation twice, even when the
- * same logical batch is sequenced twice.
+ * `exactlyOnceApplication`: a logical operation occupies one position in the total order, and
+ * no client applies it twice.
  *
  * `orderedDelivery`: cursors only move forward, and never past a pinned position.
  */
@@ -666,7 +553,6 @@ export type TraceInvariant =
 	| "clientSequenceMonotonic"
 	| "batchContiguity"
 	| "causalReferenceSequence"
-	| "minimumSequenceMonotonic"
 	| "wireReconstruction"
 	| "exactlyOnceApplication"
 	| "orderedDelivery";
@@ -676,7 +562,6 @@ export const allTraceInvariants: readonly TraceInvariant[] = [
 	"clientSequenceMonotonic",
 	"batchContiguity",
 	"causalReferenceSequence",
-	"minimumSequenceMonotonic",
 	"wireReconstruction",
 	"exactlyOnceApplication",
 	"orderedDelivery",
@@ -687,32 +572,15 @@ export interface TraceInvariantExpectation {
 	readonly invariants: readonly TraceInvariant[];
 }
 
-/**
- * How the Container Runtime splits one sequenced message's operations before dispatch: a new
- * bunch begins whenever the target DataStore changes.
- */
-export interface OperationBunch {
-	readonly dataStore: string;
-	readonly operations: readonly string[];
-}
-
-export interface OperationBunchExpectation {
-	readonly kind: "operationBunches";
-	readonly at: SequenceRef;
-	readonly bunches: readonly OperationBunch[];
-}
-
 export type ScenarioExpectation =
 	| ClientStateExpectation
 	| OperationExpectation
 	| LogicalApplicationExpectation
 	| BatchVirtualizationExpectation
-	| OperationBunchExpectation
 	| PendingReplayExpectation
 	| PendingStateExpectation
 	| SummaryExpectation
 	| DataStoreExpectation
-	| SnapshotFetchExpectation
 	| DeliveryExpectation
 	| SequenceOrderExpectation
 	| ConvergenceExpectation
